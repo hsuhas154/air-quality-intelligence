@@ -678,6 +678,11 @@ def load_hourly_features(
         "hourly_aqi",
     ] = pd.NA
 
+    # The validity flag is derived inside the temporal AQI table, before the
+    # coverage gate above runs. Recompute it here so that it always agrees
+    # with the AQI actually present on the row.
+    df["aqi_temporal_valid"] = df["hourly_aqi"].notna()
+
     # ---------------------------------------------------------------
     # Temporal features
     # ---------------------------------------------------------------

@@ -1,3 +1,5 @@
+import argparse
+import os
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -33,14 +35,19 @@ def fetch_city_locations(city: str, latitude: float, longitude: float) -> list[d
     return response.json().get("results", [])
 
 
-def main() -> None:
+DEFAULT_HISTORY_DAYS = int(os.environ.get("AQI_HISTORY_DAYS", "90"))
+
+
+def main(history_days: int = DEFAULT_HISTORY_DAYS) -> None:
     if not settings.openaq_api_key:
         raise RuntimeError("OPENAQ_API_KEY is required.")
 
     engine = get_engine()
 
     end = datetime.now(UTC)
-    start = end - timedelta(days=30)
+    start = end - timedelta(days=history_days)
+
+    print(f"Ingestion window: {history_days} days ({start.date()} -> {end.date()})")
 
     total_stations = 0
     total_measurements = 0
@@ -117,4 +124,11 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Ingest OpenAQ measurements.")
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=DEFAULT_HISTORY_DAYS,
+        help="Days of history to request per sensor.",
+    )
+    main(parser.parse_args().days)
