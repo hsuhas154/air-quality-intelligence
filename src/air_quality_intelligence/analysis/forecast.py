@@ -8,7 +8,6 @@ from sklearn.metrics import mean_absolute_error, root_mean_squared_error
 from air_quality_intelligence.analysis.features import load_hourly_features
 from air_quality_intelligence.db.engine import get_engine
 
-
 TARGET = "target_aqi_next_hour"
 DELTA_TARGET = "aqi_change"
 

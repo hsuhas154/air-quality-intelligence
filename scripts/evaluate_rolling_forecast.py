@@ -15,7 +15,6 @@ from air_quality_intelligence.analysis.forecast import (
 )
 from air_quality_intelligence.db.engine import get_engine
 
-
 TARGET = "target_aqi_next_hour"
 DELTA_TARGET = "aqi_change"
 

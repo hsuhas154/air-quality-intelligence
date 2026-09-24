@@ -7,7 +7,6 @@ from sqlalchemy.engine import Engine
 from air_quality_intelligence.analysis.aqi import calculate_aqi
 from air_quality_intelligence.db.daily_aqi import insert_daily_aqi
 
-
 LONG_TERM_POLLUTANTS = {"pm25", "pm10", "no2", "so2"}
 SHORT_TERM_POLLUTANTS = {"co", "o3"}
 

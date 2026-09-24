@@ -10,7 +10,6 @@ from air_quality_intelligence.analysis.features import load_hourly_features
 from air_quality_intelligence.analysis.forecast import build_model_features
 from air_quality_intelligence.db.engine import get_engine
 
-
 TARGET = "target_aqi_next_hour"
 DELTA_TARGET = "aqi_change"
 

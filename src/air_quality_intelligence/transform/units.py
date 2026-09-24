@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 
-
 CANONICAL_UNITS = {
     "pm25": "µg/m³",
     "pm10": "µg/m³",

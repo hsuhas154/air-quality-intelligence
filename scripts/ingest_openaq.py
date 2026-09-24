@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import httpx
 
@@ -7,7 +7,6 @@ from air_quality_intelligence.db.engine import get_engine
 from air_quality_intelligence.db.measurements import insert_measurements
 from air_quality_intelligence.db.stations import insert_station
 from air_quality_intelligence.ingestion.openaq import fetch_sensor_measurements
-
 
 TARGET_CITIES = {
     "Delhi": (28.6139, 77.2090),
@@ -40,7 +39,7 @@ def main() -> None:
 
     engine = get_engine()
 
-    end = datetime.now(timezone.utc)
+    end = datetime.now(UTC)
     start = end - timedelta(days=30)
 
     total_stations = 0

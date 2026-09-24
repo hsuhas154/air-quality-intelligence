@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error
 
 from air_quality_intelligence.analysis.features import load_hourly_features
 from air_quality_intelligence.db.engine import get_engine
-
 
 TARGET = "target_aqi_next_hour"
 DELTA_TARGET = "aqi_change"

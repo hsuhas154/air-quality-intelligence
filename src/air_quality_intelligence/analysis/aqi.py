@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 
-
 # CPCB AQI breakpoints for the pollutants used by the project.
 # Each tuple is:
 # (concentration_low, concentration_high, AQI_low, AQI_high)

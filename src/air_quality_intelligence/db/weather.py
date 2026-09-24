@@ -1,6 +1,6 @@
+import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
-import pandas as pd
 
 
 def insert_weather(

@@ -11,6 +11,7 @@ from sklearn.metrics import (
     mean_absolute_error,
     root_mean_squared_error,
 )
+from xgboost import XGBRegressor
 
 from air_quality_intelligence.analysis.features import (
     load_hourly_features,
@@ -19,9 +20,6 @@ from air_quality_intelligence.analysis.forecast import (
     build_model_features,
 )
 from air_quality_intelligence.db.engine import get_engine
-
-from xgboost import XGBRegressor
-
 
 TARGET = "target_aqi_next_hour"
 DELTA_TARGET = "aqi_change"

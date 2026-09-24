@@ -7,14 +7,12 @@ from sqlalchemy.engine import Engine
 
 from air_quality_intelligence.analysis.aqi import calculate_aqi
 from air_quality_intelligence.analysis.temporal import (
-    AVERAGING_HOURS,
     calculate_strict_averages,
 )
 from air_quality_intelligence.transform.units import (
     UnitConversionError,
     normalize_concentration,
 )
-
 
 POLLUTANTS = [
     "pm25",

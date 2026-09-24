@@ -8,7 +8,6 @@ from air_quality_intelligence.analysis.eda import (
 )
 from air_quality_intelligence.db.engine import get_engine
 
-
 OUTPUT_DIR = Path("outputs/eda")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 

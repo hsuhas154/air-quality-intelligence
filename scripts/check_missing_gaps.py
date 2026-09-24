@@ -1,5 +1,5 @@
-from air_quality_intelligence.db.engine import get_engine
 from air_quality_intelligence.analysis.features import load_hourly_features
+from air_quality_intelligence.db.engine import get_engine
 
 
 def longest_missing_run(series):

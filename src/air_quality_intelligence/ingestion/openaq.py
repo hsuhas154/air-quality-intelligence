@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pandas as pd
@@ -24,8 +24,8 @@ def fetch_sensor_measurements(
     headers = {"X-API-Key": settings.openaq_api_key}
 
     params = {
-        "datetime_from": start.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "datetime_to": end.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "datetime_from": start.astimezone(UTC).isoformat().replace("+00:00", "Z"),
+        "datetime_to": end.astimezone(UTC).isoformat().replace("+00:00", "Z"),
         "limit": limit,
     }
 
@@ -63,7 +63,7 @@ def fetch_recent_sensor_measurements(
 ) -> pd.DataFrame:
     """Fetch recent measurements for a sensor."""
 
-    end = datetime.now(timezone.utc)
+    end = datetime.now(UTC)
     start = end - timedelta(hours=hours)
 
     return fetch_sensor_measurements(
