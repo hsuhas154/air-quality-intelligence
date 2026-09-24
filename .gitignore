@@ -10,3 +10,5 @@ __pycache__/
 .DS_Store
 .streamlit/secrets.toml
 *.log
+.vscode/
+*.egg-info/
