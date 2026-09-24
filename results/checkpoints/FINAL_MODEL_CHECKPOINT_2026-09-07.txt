@@ -1,0 +1,787 @@
+================================================================================
+AIR QUALITY INTELLIGENCE
+FINAL MODEL SELECTION + UNTOUCHED HOLDOUT CHECKPOINT
+================================================================================
+
+Checkpoint date:
+  2026-09-07
+
+Project:
+  air-quality-intelligence
+
+Environment:
+  Conda environment: air_quality
+  Python: 3.11.15
+
+Project directory:
+  /home/suhas/air-quality-intelligence
+
+Purpose of this checkpoint:
+  This checkpoint records the final model-selection decision and the results
+  obtained from the temporally untouched final holdout evaluation.
+
+  The forecasting model-selection stage is now FROZEN.
+
+  Future work must build around this frozen result rather than use the final
+  holdout to tune or select another model.
+
+
+================================================================================
+1. FINAL MODEL-SELECTION DECISION
+================================================================================
+
+Primary forecasting model:
+  Random Forest Regressor
+
+Selected feature set:
+  C
+
+Primary baseline:
+  Persistence
+
+Secondary baseline:
+  Mean Change
+
+Model-selection methodology:
+  Strict chronological expanding-window cross-validation
+
+Final evaluation methodology:
+  One temporally untouched final holdout
+
+Final decision:
+  Random Forest with feature set C is the frozen primary forecasting model.
+
+Important:
+  The final holdout has now been used for final evaluation.
+
+  The final holdout MUST NOT be used for:
+    - hyperparameter tuning
+    - feature selection
+    - model selection
+    - threshold tuning
+    - repeated experimentation
+    - choosing a different model because of its holdout performance
+
+  Any future model-development experiments must use a new development split
+  or newly collected data.
+
+
+================================================================================
+2. FORECASTING TARGET
+================================================================================
+
+Target:
+  target_aqi_next_hour
+
+Definition:
+  AQI at the exact next hourly timestamp for the same city.
+
+Auxiliary target used during model development:
+  aqi_change
+
+Definition:
+  next-hour AQI minus current-hour AQI.
+
+Modeling approach:
+  Random Forest predicts AQI change, which is then reconstructed into the
+  next-hour AQI forecast.
+
+Conceptually:
+
+  predicted_aqi_change = RF(features)
+
+  predicted_next_hour_aqi =
+      current_hour_aqi + predicted_aqi_change
+
+
+================================================================================
+3. FINAL DATASET
+================================================================================
+
+Total usable forecasting observations:
+  839
+
+Usable observations by city:
+
+  Bengaluru: 410
+  Delhi:     429
+
+Full usable temporal range:
+
+  2026-07-18 19:00:00+00:00
+  ->
+  2026-08-17 12:00:00+00:00
+
+
+================================================================================
+4. FINAL DEVELOPMENT / HOLDOUT SPLIT
+================================================================================
+
+Holdout cutoff:
+
+  2026-08-13 13:00:00+00:00
+
+Development observations:
+  670
+
+Development observations by city:
+
+  Bengaluru: 325
+  Delhi:     345
+
+Development temporal range:
+
+  2026-07-18 19:00:00+00:00
+  ->
+  2026-08-13 13:00:00+00:00
+
+Final untouched holdout observations:
+  169
+
+Holdout observations by city:
+
+  Bengaluru: 85
+  Delhi:     84
+
+Final holdout temporal range:
+
+  2026-08-13 14:00:00+00:00
+  ->
+  2026-08-17 12:00:00+00:00
+
+Split integrity:
+  PASS
+
+The holdout begins strictly after the development cutoff.
+
+
+================================================================================
+5. CHRONOLOGICAL CROSS-VALIDATION
+================================================================================
+
+Cross-validation design:
+
+  Expanding-window chronological validation
+
+Number of folds:
+  10
+
+Minimum training duration:
+  7 days
+
+Test observations per city per fold:
+  16
+
+The folds were constructed chronologically.
+
+No future observations were permitted to enter the training data for a fold.
+
+The strict chronological fold implementation was checked for:
+  - global train/test temporal separation
+  - city-specific temporal separation
+  - chronological ordering
+  - absence of future observations in training
+
+
+================================================================================
+6. FEATURE SET C
+================================================================================
+
+The frozen primary feature set contains:
+
+Current AQI:
+  hourly_aqi
+
+Temporal features:
+  hour_of_day
+  day_of_week
+
+Current pollutant concentrations:
+  pm25
+  pm10
+  no2
+  so2
+  o3
+  co
+
+Station coverage features:
+  pm25_station_count
+  pm10_station_count
+  no2_station_count
+  so2_station_count
+  o3_station_count
+  co_station_count
+  total_station_count
+  pm25_coverage_valid
+
+Weather features:
+  temp_c
+  humidity
+  wind_speed
+  wind_dir
+  blh
+
+Exact historical pollutant lags:
+  pm25_lag1
+  pm25_lag3
+  pm25_lag6
+
+  pm10_lag1
+  pm10_lag3
+  pm10_lag6
+
+  no2_lag1
+  no2_lag3
+  no2_lag6
+
+  so2_lag1
+  so2_lag3
+  so2_lag6
+
+  o3_lag1
+  o3_lag3
+  o3_lag6
+
+  co_lag1
+  co_lag3
+  co_lag6
+
+Total model features:
+  40
+
+
+================================================================================
+7. IMPORTANT FEATURE-ENGINEERING METHODOLOGY
+================================================================================
+
+Lag features use exact timestamp matching.
+
+A lag feature means:
+
+  pollutant value exactly N hours before the prediction timestamp.
+
+Missing exact timestamps remain missing.
+
+The lag implementation does NOT rely on blindly shifting dataframe rows.
+
+This protects against irregular timestamp spacing and prevents accidental
+temporal misalignment.
+
+The next-hour target is also constructed using exact timestamp lookup.
+
+The target is NOT created using a simple shift(-1) across rows.
+
+Therefore, a missing next-hour observation does not cause a later observation
+to become the target incorrectly.
+
+
+================================================================================
+8. AQI COVERAGE GATE
+================================================================================
+
+Hourly AQI calculations use a PM2.5 station-coverage gate.
+
+Minimum PM2.5 station coverage:
+
+  Bengaluru: >= 5 stations
+  Delhi:     >= 31 stations
+
+A boolean feature is retained:
+
+  pm25_coverage_valid
+
+Station-count features are also retained for modeling.
+
+This was introduced because early hourly AQI calculations could otherwise
+produce artificial AQI jumps from extremely sparse station coverage.
+
+
+================================================================================
+9. MISSING-VALUE HANDLING
+================================================================================
+
+Final holdout evaluation:
+
+Training missing feature values:
+  800
+
+Holdout missing feature values:
+  310
+
+Missing numerical feature values are handled using training-only median
+imputation.
+
+Missingness indicators are retained where applicable through the established
+model-feature construction pipeline.
+
+Training medians are calculated using development/training data only.
+
+Holdout information is not used to calculate imputation statistics.
+
+
+================================================================================
+10. FROZEN RANDOM FOREST CONFIGURATION
+================================================================================
+
+Random Forest Regressor:
+
+  n_estimators = 300
+  max_depth = 12
+  min_samples_leaf = 2
+  random_state = 42
+  n_jobs = -1
+
+These parameters are FROZEN for the reported final result.
+
+
+================================================================================
+11. MODEL-DEVELOPMENT RESULTS
+================================================================================
+
+Earlier chronological expanding-window evaluation with feature set C
+produced approximately:
+
+  Random Forest:
+    MAE  = 5.2918
+    RMSE = 7.0685
+
+  Persistence:
+    MAE  = 5.3719
+    RMSE = 7.1870
+
+  Mean Change:
+    MAE  = 5.3932
+    RMSE = 7.2008
+
+Random Forest improvement over persistence during this development/CV stage:
+
+  MAE improvement  = approximately 1.49%
+  RMSE improvement = approximately 1.65%
+
+The CV result established Random Forest + feature set C as a reasonable
+candidate before the final holdout was evaluated.
+
+
+================================================================================
+12. FINAL UNTOUCHED HOLDOUT RESULTS
+================================================================================
+
+FINAL HOLDOUT:
+
+                    MAE       RMSE
+  Persistence      5.4438    7.4762
+  Mean Change      5.4724    7.4919
+  Random Forest    4.9964    6.6462
+
+Random Forest improvement over persistence:
+
+  MAE:
+    8.2180%
+
+  RMSE:
+    11.1024%
+
+
+FINAL PRIMARY RESULT:
+
+  Random Forest
+    MAE  = 4.9964
+    RMSE = 6.6462
+
+  Persistence
+    MAE  = 5.4438
+    RMSE = 7.4762
+
+  Improvement:
+    MAE  = 8.2180%
+    RMSE = 11.1024%
+
+
+================================================================================
+13. FINAL HOLDOUT CITY-LEVEL RESULTS
+================================================================================
+
+BENGALURU
+---------
+
+Holdout observations:
+  85
+
+Persistence:
+  MAE  = 4.6000
+  RMSE = 6.1806
+
+Mean Change:
+  MAE  = 4.6254
+  RMSE = 6.1939
+
+Random Forest:
+  MAE  = 4.6024
+  RMSE = 5.8938
+
+Random Forest improvement vs persistence:
+
+  MAE:
+    -0.0520%
+
+  RMSE:
+    4.6413%
+
+
+Interpretation:
+
+  Random Forest is essentially tied with persistence for Bengaluru MAE,
+  while achieving a modest RMSE improvement.
+
+  Persistence remains extremely competitive in Bengaluru.
+
+  No claim should be made that Random Forest universally dominates
+  persistence across cities.
+
+
+DELHI
+-----
+
+Holdout observations:
+  84
+
+Persistence:
+  MAE  = 6.2976
+  RMSE = 8.5906
+
+Mean Change:
+  MAE  = 6.3295
+  RMSE = 8.6084
+
+Random Forest:
+  MAE  = 5.3951
+  RMSE = 7.3293
+
+Random Forest improvement vs persistence:
+
+  MAE:
+    14.3307%
+
+  RMSE:
+    14.6817%
+
+
+Interpretation:
+
+  Random Forest provides a substantial improvement over persistence for
+  Delhi in the final holdout.
+
+
+================================================================================
+14. OBSERVATION-LEVEL HOLDOUT DIAGNOSTICS
+================================================================================
+
+Number of holdout observations:
+  169
+
+Random Forest wins:
+  97
+
+Persistence wins:
+  72
+
+Ties:
+  0
+
+Random Forest wins approximately 57.4% of individual holdout observations.
+
+This supports the conclusion that the aggregate improvement is not solely
+caused by one or two exceptional observations.
+
+
+================================================================================
+15. FINAL HOLDOUT ERROR DISTRIBUTION
+================================================================================
+
+Random Forest:
+
+  Mean error:
+    -1.2141
+
+  Standard deviation:
+    6.5538
+
+  Median absolute error:
+    3.8746
+
+  75th percentile absolute error:
+    7.0287
+
+  Minimum error:
+    -16.2592
+
+  Maximum error:
+    28.0937
+
+
+Persistence:
+
+  Mean error:
+    -0.4852
+
+  Standard deviation:
+    7.4826
+
+  Median absolute error:
+    4.0000
+
+  75th percentile absolute error:
+    8.0000
+
+  Minimum error:
+    -25.0000
+
+  Maximum error:
+    27.0000
+
+
+Important diagnostic:
+
+  Random Forest has a modest negative mean error on the final holdout,
+  indicating some tendency toward underprediction.
+
+  This should be retained as a model diagnostic and should not be hidden.
+
+
+================================================================================
+16. WHAT THE FINAL RESULT DOES AND DOES NOT ESTABLISH
+================================================================================
+
+ESTABLISHED:
+
+  1. Random Forest + feature set C outperforms persistence on the combined
+     final holdout.
+
+  2. The final improvement is:
+       +8.2180% MAE
+       +11.1024% RMSE
+
+  3. Random Forest substantially improves over persistence for Delhi.
+
+  4. Random Forest approximately ties persistence in Bengaluru MAE while
+     improving RMSE.
+
+  5. The final result survives chronological holdout evaluation.
+
+  6. The model therefore has sufficient evidence to serve as the frozen
+     primary forecasting model for the portfolio project.
+
+
+NOT ESTABLISHED:
+
+  1. Random Forest is universally better than persistence.
+
+  2. The model will necessarily generalize to Mumbai, Kolkata, or Chennai.
+
+  3. The model's current AQI methodology is fully equivalent to a production
+     implementation of the CPCB National AQI methodology.
+
+  4. The current approximately 30-day dataset is sufficient to establish
+     long-term seasonal performance.
+
+  5. The model establishes causal relationships between weather/pollutants
+     and AQI.
+
+
+================================================================================
+17. IMPORTANT AQI METHODOLOGY CAVEAT
+================================================================================
+
+The current hourly AQI implementation is a CPCB-style approximation.
+
+CPCB pollutant averaging periods include:
+
+  PM10, PM2.5, NO2, SO2, NH3, Pb:
+    24-hour averaging
+
+  CO, O3:
+    8-hour averaging
+
+The current hourly feature pipeline does not yet fully construct all of
+these prescribed averaging windows before calculating the AQI.
+
+Therefore:
+
+  The current forecasting result should be described accurately as being
+  based on the project's current hourly AQI implementation.
+
+Future production hardening should address the official pollutant-specific
+averaging periods before presenting the platform as a fully standards-faithful
+AQI implementation.
+
+
+================================================================================
+18. OTHER DATA-METHODOLOGY CAVEATS
+================================================================================
+
+Current city-level pollutant aggregation is based on available station
+measurements.
+
+A future hardened implementation may consider:
+
+  - station-level hourly concentrations/AQI
+  - more explicit station weighting
+  - stronger station coverage requirements
+  - pollutant-specific coverage requirements
+  - better handling of station availability
+  - expanded historical data
+
+The current model result should not be retroactively altered because of
+these future improvements.
+
+Any changed AQI methodology constitutes a new modeling dataset/pipeline and
+must be evaluated independently.
+
+
+================================================================================
+19. GENERATED FINAL-HOLDOUT FILES
+================================================================================
+
+The final holdout evaluator generated:
+
+  outputs/final_holdout_model_results.csv
+
+  outputs/final_holdout_model_results_by_city.csv
+
+  outputs/final_holdout_predictions.csv
+
+
+These files contain the final reported holdout evaluation artifacts.
+
+They should be preserved as part of the project's experiment record.
+
+
+================================================================================
+20. FINAL HOLDOUT EVALUATION SCRIPT
+================================================================================
+
+Script:
+
+  scripts/evaluate_final_holdout.py
+
+The script implements:
+
+  - frozen holdout cutoff
+  - development/holdout split
+  - integrity checks
+  - frozen C feature selection
+  - training-only imputation
+  - frozen Random Forest configuration
+  - persistence baseline
+  - mean-change baseline
+  - aggregate evaluation
+  - city-level evaluation
+  - observation-level diagnostics
+  - final result file generation
+
+
+================================================================================
+21. REPRODUCIBILITY INFORMATION
+================================================================================
+
+Earlier project checkpoint hashes:
+
+  compare_forecast_models.py:
+    92c33a1978bd1f87c1b6e0580d97c22a2685aa1730e28edd43f3c8f66ae824d9
+
+  features.py:
+    1997e5085f45705c9590e01b44a4a0a6a5b578a2329ff2c2d2b2f74b8dc79b61
+
+  forecast.py:
+    03b42d1e6173f14fd27ba20ba3a6ada3ed6115c9461b9d67077fd9f41f63a5db
+
+These identify the code state associated with the prior model-selection
+checkpoint.
+
+The exact final holdout script should also be hashed and recorded after
+creation.
+
+
+================================================================================
+22. PROJECT STATUS AFTER THIS CHECKPOINT
+================================================================================
+
+DATA:
+  Core data pipeline established.
+  Weather data available for five cities.
+  Initial modeling dataset currently covers Bengaluru and Delhi.
+
+FEATURE ENGINEERING:
+  Exact temporal lags established.
+  Coverage diagnostics established.
+  PM2.5 coverage gate established.
+  Time-based rolling features exist but are NOT part of frozen feature set C.
+
+MODEL SELECTION:
+  COMPLETE.
+
+FINAL MODEL:
+  FROZEN.
+
+FINAL HOLDOUT:
+  COMPLETE.
+
+PRIMARY MODEL:
+  Random Forest.
+
+BASELINE:
+  Persistence.
+
+NEXT PROJECT PHASE:
+  Build the production/application layer around the frozen forecasting result.
+
+
+================================================================================
+23. RULE FOR FUTURE SESSIONS
+================================================================================
+
+DO NOT reopen model selection merely because:
+
+  - another model appears interesting,
+  - another hyperparameter configuration might perform better,
+  - the holdout result could potentially be improved,
+  - Bengaluru is difficult to beat,
+  - additional feature engineering appears promising.
+
+The reported final holdout is now part of the project's permanent evaluation
+record.
+
+Any genuinely new forecasting methodology must be treated as a NEW MODEL
+EXPERIMENT.
+
+If a new model is eventually developed, it must be evaluated without
+contaminating the existing final holdout result.
+
+The current Random Forest result remains the official frozen benchmark until
+a properly designed future experiment replaces it.
+
+
+================================================================================
+24. OFFICIAL PORTFOLIO RESULT
+================================================================================
+
+Recommended concise portfolio statement:
+
+  "Built an hourly AQI forecasting pipeline using pollutant, temporal,
+   station-coverage, weather, and lagged pollutant features. A Random Forest
+   model was selected using strict chronological expanding-window validation
+   and evaluated on a temporally untouched holdout, achieving 4.996 MAE and
+   6.646 RMSE, improving over a persistence baseline by 8.22% and 11.10%,
+   respectively."
+
+More conservative version:
+
+  "Developed and evaluated a one-hour-ahead AQI forecasting model using
+   chronological validation and an untouched temporal holdout. Random
+   Forest achieved 4.996 MAE and 6.646 RMSE versus 5.444 and 7.476 for
+   persistence, corresponding to 8.22% MAE and 11.10% RMSE improvement."
+
+
+================================================================================
+END OF FINAL MODEL SELECTION + UNTOUCHED HOLDOUT CHECKPOINT
+================================================================================

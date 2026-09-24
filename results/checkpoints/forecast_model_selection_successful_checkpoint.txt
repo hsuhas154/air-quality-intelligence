@@ -1,0 +1,417 @@
+================================================================================
+AIR QUALITY INTELLIGENCE PLATFORM
+SUCCESSFUL MODEL-SELECTION CHECKPOINT
+================================================================================
+
+Checkpoint:
+    Forecast model selection under corrected chronological cross-validation
+
+Status:
+    SUCCESSFUL / KNOWN-GOOD REFERENCE STATE
+
+Created:
+    September 2026
+
+Purpose
+-------
+This checkpoint records the successful state of the forecasting experiments
+before proceeding to final untouched holdout evaluation.
+
+If later changes produce unexpected results, this checkpoint should be treated
+as the known-good reference for the forecasting methodology and model-selection
+stage.
+
+IMPORTANT:
+    This checkpoint records DEVELOPMENT / CROSS-VALIDATION results.
+    These are NOT the final untouched test-set results.
+
+
+================================================================================
+1. DATASET STATE
+================================================================================
+
+Usable forecasting observations:
+    839
+
+City distribution:
+    Bengaluru: 410
+    Delhi:     429
+
+Date range:
+    2026-07-18 19:00:00+00:00
+    to
+    2026-08-17 12:00:00+00:00
+
+Forecast target:
+    target_aqi_next_hour
+
+Model formulation:
+    The model predicts AQI change:
+
+        aqi_change = target_aqi_next_hour - hourly_aqi
+
+    Predicted AQI is reconstructed as:
+
+        predicted_aqi = hourly_aqi + predicted_aqi_change
+
+
+================================================================================
+2. TEMPORAL FEATURE-REDUCTION EXPERIMENT
+================================================================================
+
+Feature configurations evaluated:
+
+    A - Current State
+    B - Short History
+    C - Medium History
+    D - Full History
+
+Preferred configuration:
+    C - Medium History
+
+Configuration C contains:
+
+    - Current AQI
+    - Hour of day
+    - Day of week
+    - Current pollutant concentrations
+    - Station coverage features
+    - Weather features
+    - Pollutant lag 1 hour
+    - Pollutant lag 3 hours
+    - Pollutant lag 6 hours
+
+Excluded from C:
+
+    - 24-hour pollutant lag
+    - Rolling features
+    - Future information
+
+Reason for selecting C:
+    Configuration D provided only a negligible MAE advantage over C while
+    having slightly worse RMSE and additional feature complexity.
+
+C was therefore selected as the primary feature configuration.
+
+
+================================================================================
+3. CORRECTED CHRONOLOGICAL CROSS-VALIDATION
+================================================================================
+
+Number of folds:
+    10
+
+Initial minimum training period:
+    7 calendar days
+
+Test observations per city per fold:
+    24
+
+Total test observations per fold:
+    48
+
+Cross-validation design:
+    Strict chronological expanding-window evaluation.
+
+Rules:
+
+    - Each city contributes exactly 24 test observations per fold.
+    - Initial training begins after at least 7 calendar days.
+    - Training observations occur strictly before test observations.
+    - The training window expands after each fold.
+    - Test observations are the first 24 usable observations strictly after
+      the current training cutoff for each city.
+    - Global chronological leakage checks are performed.
+    - City-level chronological leakage checks are performed.
+
+Fold sizes:
+
+    Fold 1:
+        Train = 320
+        Test  = 48
+
+    Fold 2:
+        Train = 368
+        Test  = 48
+
+    Fold 3:
+        Train = 416
+        Test  = 48
+
+    Fold 4:
+        Train = 464
+        Test  = 48
+
+    Fold 5:
+        Train = 524
+        Test  = 48
+
+    Fold 6:
+        Train = 578
+        Test  = 48
+
+    Fold 7:
+        Train = 626
+        Test  = 48
+
+    Fold 8:
+        Train = 676
+        Test  = 48
+
+    Fold 9:
+        Train = 724
+        Test  = 48
+
+    Fold 10:
+        Train = 772
+        Test = 48
+
+
+================================================================================
+4. MODEL COMPARISON
+================================================================================
+
+Models evaluated:
+
+    1. Persistence
+    2. Mean Change
+    3. Random Forest
+    4. HistGradientBoosting
+    5. XGBoost
+
+Primary metrics:
+
+    MAE
+    RMSE
+
+Aggregate results:
+
+    Random Forest
+        MAE  = 5.204
+        RMSE = 7.047
+        MAE improvement vs persistence  = 6.795%
+        RMSE improvement vs persistence = 7.303%
+        MAE fold wins  = 7/10
+        RMSE fold wins = 9/10
+
+    XGBoost
+        MAE  = 5.369
+        RMSE = 7.167
+        MAE improvement vs persistence  = 3.834%
+        RMSE improvement vs persistence = 5.718%
+        MAE fold wins  = 7/10
+        RMSE fold wins = 7/10
+
+    Persistence
+        MAE  = 5.583
+        RMSE = 7.602
+
+    Mean Change
+        MAE  = 5.604
+        RMSE = 7.614
+        MAE improvement vs persistence  = -0.376%
+        RMSE improvement vs persistence = -0.164%
+
+    HistGradientBoosting
+        MAE  = 5.662
+        RMSE = 7.449
+        MAE improvement vs persistence  = -1.411%
+        RMSE improvement vs persistence = 2.016%
+
+
+================================================================================
+5. CITY-LEVEL RESULTS
+================================================================================
+
+Bengaluru:
+
+    Persistence
+        MAE  = 4.992
+        RMSE = 6.880
+
+    Random Forest
+        MAE  = 4.881
+        RMSE = 6.646
+
+    HistGradientBoosting
+        MAE  = 5.406
+        RMSE = 7.122
+
+    XGBoost
+        MAE  = 5.186
+        RMSE = 6.931
+
+
+Delhi:
+
+    Persistence
+        MAE  = 6.175
+        RMSE = 8.261
+
+    Random Forest
+        MAE  = 5.527
+        RMSE = 7.426
+
+    HistGradientBoosting
+        MAE  = 5.918
+        RMSE = 7.762
+
+    XGBoost
+        MAE  = 5.552
+        RMSE = 7.395
+
+
+================================================================================
+6. MODEL-SELECTION CONCLUSION
+================================================================================
+
+PRIMARY ML MODEL:
+    Random Forest
+
+PRIMARY FEATURE CONFIGURATION:
+    C - Current state + pollutant lags 1, 3 and 6 hours
+
+PRIMARY BASELINE:
+    Persistence
+
+SECONDARY ML BENCHMARK:
+    XGBoost
+
+REJECTED AS PRIMARY MODEL:
+    HistGradientBoosting
+
+REFERENCE BASELINE:
+    Mean Change
+
+Rationale:
+    Random Forest achieved the lowest aggregate MAE and RMSE.
+
+    Random Forest improved over persistence by:
+
+        MAE:
+            6.795%
+
+        RMSE:
+            7.303%
+
+    Random Forest won:
+
+        7/10 folds by MAE
+        9/10 folds by RMSE
+
+    The result is consistent with the independent temporal feature-reduction
+    experiment, which also identified configuration C as the preferred feature
+    set.
+
+IMPORTANT:
+    Model selection is now considered complete for the current development
+    dataset and feature methodology.
+
+
+================================================================================
+7. DATA / METHODOLOGY NOTES
+================================================================================
+
+Current AQI implementation:
+    CPCB-style hourly approximation.
+
+Important limitation:
+    CPCB pollutant averaging periods are not yet fully represented in the
+    current hourly feature pipeline.
+
+    In particular, proper averaging periods for pollutants such as PM2.5,
+    PM10, CO and O3 require further methodological hardening before claiming
+    a production-grade CPCB AQI implementation.
+
+Station aggregation:
+    Current city-level pollutant aggregation uses the available station
+    measurements with coverage gating.
+
+Coverage safeguard:
+    PM2.5 station-count thresholds are used to prevent severely under-covered
+    hours from generating misleading AQI values.
+
+Missing feature values:
+    Training-only median imputation is used within model preprocessing.
+    Test data is never used to calculate training imputation statistics.
+
+
+================================================================================
+8. RESULTS GENERATED
+================================================================================
+
+Raw successful terminal output:
+    corrected_temporal_results.txt
+
+Model-comparison result files:
+
+    outputs/forecast_model_comparison.csv
+
+    outputs/forecast_model_comparison_by_city.csv
+
+    outputs/forecast_model_comparison_by_fold.csv
+
+Checkpoint file:
+    results/checkpoints/forecast_model_selection_successful_checkpoint.txt
+
+
+================================================================================
+9. WHAT THIS CHECKPOINT ESTABLISHES
+================================================================================
+
+This checkpoint establishes a known-good reference state in which:
+
+    - The corrected chronological expanding-window CV executes successfully.
+    - Ten chronological folds are evaluated.
+    - Temporal leakage checks are active.
+    - Configuration C is the selected feature configuration.
+    - Random Forest is the selected primary ML model.
+    - Persistence is the primary naive baseline.
+    - XGBoost is retained as a secondary benchmark.
+    - Results are reproducible from the current development pipeline and
+      generated output files.
+
+These results should be preserved even if subsequent experiments change the
+code, AQI methodology, feature engineering, city coverage, or model.
+
+
+================================================================================
+10. IMPORTANT LIMITATION
+================================================================================
+
+The above results are DEVELOPMENT / CROSS-VALIDATION results.
+
+They must NOT yet be presented as the final unbiased performance of the
+finished forecasting system.
+
+The feature configuration and model have been selected using the development
+experiments.
+
+A separate chronological final holdout must therefore be established and
+evaluated only after the development decisions are frozen.
+
+The final holdout must not be used for:
+
+    - Feature selection
+    - Model selection
+    - Hyperparameter tuning
+    - Threshold selection
+    - Other development decisions
+
+
+================================================================================
+11. NEXT STEP
+================================================================================
+
+Immediate next step:
+
+    Inspect the observations remaining after the ten development folds and
+    design an untouched chronological final holdout.
+
+No additional modeling decision should be made before establishing this
+holdout.
+
+
+================================================================================
+END OF SUCCESSFUL CHECKPOINT
+================================================================================

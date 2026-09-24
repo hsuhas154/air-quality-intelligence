@@ -47,11 +47,11 @@ ruff check .
 ## Planned milestones
 
 1. Connect live OpenAQ measurements and station metadata.
-2. Add 60–90 day backfill and scheduled ingestion.
+2. Add 60-90 day backfill and scheduled ingestion.
 3. Persist hourly weather for all target cities.
 4. Compute daily AQI and dominant pollutant.
 5. Add EDA, station ranking and AQI-weather analysis.
-6. Add 24–48 hour forecast evaluation against the naive baseline.
+6. Add 24-48 hour forecast evaluation against the naive baseline.
 7. Wire the dashboard to PostGIS and publish the application.
 
 ## Phase 2

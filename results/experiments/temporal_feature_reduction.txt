@@ -1,0 +1,329 @@
+==============================================================================
+TEMPORAL FEATURE-REDUCTION STUDY
+==============================================================================
+
+Loading hourly features...
+Usable observations: 839
+  Bengaluru: 410
+  Delhi: 429
+Date range: 2026-07-18 19:00:00+00:00 -> 2026-08-17 12:00:00+00:00
+
+Rolling evaluation: 10 folds
+Test observations per city per fold: 24
+
+Experiments:
+  A: Current State
+  B: Short History (lag1)
+  C: Medium History (lag1/3/6)
+  D: Full History (lag1/3/6/24 + rolling)
+
+##############################################################################
+FOLD 1
+##############################################################################
+Train: 320
+Test:  48
+
+Persistence: MAE=5.854, RMSE=7.344
+Mean-change: MAE=5.885, RMSE=7.378
+
+  Experiment A: Current State
+    RF: MAE=5.282, RMSE=6.671
+    vs persistence: MAE=+9.8%, RMSE=+9.2%
+
+  Experiment B: Short History (lag1)
+    RF: MAE=5.347, RMSE=6.899
+    vs persistence: MAE=+8.7%, RMSE=+6.1%
+
+  Experiment C: Medium History (lag1/3/6)
+    RF: MAE=5.333, RMSE=6.878
+    vs persistence: MAE=+8.9%, RMSE=+6.4%
+
+  Experiment D: Full History (lag1/3/6/24 + rolling)
+    RF: MAE=5.332, RMSE=6.904
+    vs persistence: MAE=+8.9%, RMSE=+6.0%
+
+##############################################################################
+FOLD 2
+##############################################################################
+Train: 368
+Test:  48
+
+Persistence: MAE=5.354, RMSE=7.230
+Mean-change: MAE=5.359, RMSE=7.218
+
+  Experiment A: Current State
+    RF: MAE=5.195, RMSE=6.906
+    vs persistence: MAE=+3.0%, RMSE=+4.5%
+
+  Experiment B: Short History (lag1)
+    RF: MAE=5.503, RMSE=7.035
+    vs persistence: MAE=-2.8%, RMSE=+2.7%
+
+  Experiment C: Medium History (lag1/3/6)
+    RF: MAE=5.687, RMSE=7.241
+    vs persistence: MAE=-6.2%, RMSE=-0.2%
+
+  Experiment D: Full History (lag1/3/6/24 + rolling)
+    RF: MAE=5.710, RMSE=7.148
+    vs persistence: MAE=-6.6%, RMSE=+1.1%
+
+##############################################################################
+FOLD 3
+##############################################################################
+Train: 416
+Test:  48
+
+Persistence: MAE=6.312, RMSE=8.513
+Mean-change: MAE=6.312, RMSE=8.521
+
+  Experiment A: Current State
+    RF: MAE=5.682, RMSE=7.904
+    vs persistence: MAE=+10.0%, RMSE=+7.2%
+
+  Experiment B: Short History (lag1)
+    RF: MAE=5.563, RMSE=7.617
+    vs persistence: MAE=+11.9%, RMSE=+10.5%
+
+  Experiment C: Medium History (lag1/3/6)
+    RF: MAE=5.669, RMSE=7.634
+    vs persistence: MAE=+10.2%, RMSE=+10.3%
+
+  Experiment D: Full History (lag1/3/6/24 + rolling)
+    RF: MAE=5.642, RMSE=7.591
+    vs persistence: MAE=+10.6%, RMSE=+10.8%
+
+##############################################################################
+FOLD 4
+##############################################################################
+Train: 464
+Test:  48
+
+Persistence: MAE=4.875, RMSE=7.402
+Mean-change: MAE=4.939, RMSE=7.446
+
+  Experiment A: Current State
+    RF: MAE=5.562, RMSE=8.938
+    vs persistence: MAE=-14.1%, RMSE=-20.8%
+
+  Experiment B: Short History (lag1)
+    RF: MAE=5.605, RMSE=8.940
+    vs persistence: MAE=-15.0%, RMSE=-20.8%
+
+  Experiment C: Medium History (lag1/3/6)
+    RF: MAE=5.589, RMSE=8.506
+    vs persistence: MAE=-14.6%, RMSE=-14.9%
+
+  Experiment D: Full History (lag1/3/6/24 + rolling)
+    RF: MAE=5.675, RMSE=8.890
+    vs persistence: MAE=-16.4%, RMSE=-20.1%
+
+##############################################################################
+FOLD 5
+##############################################################################
+Train: 524
+Test:  48
+
+Persistence: MAE=5.208, RMSE=6.513
+Mean-change: MAE=5.198, RMSE=6.476
+
+  Experiment A: Current State
+    RF: MAE=4.694, RMSE=5.904
+    vs persistence: MAE=+9.9%, RMSE=+9.3%
+
+  Experiment B: Short History (lag1)
+    RF: MAE=4.651, RMSE=5.823
+    vs persistence: MAE=+10.7%, RMSE=+10.6%
+
+  Experiment C: Medium History (lag1/3/6)
+    RF: MAE=4.455, RMSE=5.627
+    vs persistence: MAE=+14.5%, RMSE=+13.6%
+
+  Experiment D: Full History (lag1/3/6/24 + rolling)
+    RF: MAE=4.427, RMSE=5.724
+    vs persistence: MAE=+15.0%, RMSE=+12.1%
+
+##############################################################################
+FOLD 6
+##############################################################################
+Train: 578
+Test:  48
+
+Persistence: MAE=3.604, RMSE=4.544
+Mean-change: MAE=3.650, RMSE=4.569
+
+  Experiment A: Current State
+    RF: MAE=3.897, RMSE=4.872
+    vs persistence: MAE=-8.1%, RMSE=-7.2%
+
+  Experiment B: Short History (lag1)
+    RF: MAE=3.640, RMSE=4.531
+    vs persistence: MAE=-1.0%, RMSE=+0.3%
+
+  Experiment C: Medium History (lag1/3/6)
+    RF: MAE=3.631, RMSE=4.444
+    vs persistence: MAE=-0.7%, RMSE=+2.2%
+
+  Experiment D: Full History (lag1/3/6/24 + rolling)
+    RF: MAE=3.661, RMSE=4.622
+    vs persistence: MAE=-1.6%, RMSE=-1.7%
+
+##############################################################################
+FOLD 7
+##############################################################################
+Train: 626
+Test:  48
+
+Persistence: MAE=8.125, RMSE=10.695
+Mean-change: MAE=8.146, RMSE=10.727
+
+  Experiment A: Current State
+    RF: MAE=6.936, RMSE=9.540
+    vs persistence: MAE=+14.6%, RMSE=+10.8%
+
+  Experiment B: Short History (lag1)
+    RF: MAE=7.027, RMSE=9.455
+    vs persistence: MAE=+13.5%, RMSE=+11.6%
+
+  Experiment C: Medium History (lag1/3/6)
+    RF: MAE=7.135, RMSE=9.449
+    vs persistence: MAE=+12.2%, RMSE=+11.6%
+
+  Experiment D: Full History (lag1/3/6/24 + rolling)
+    RF: MAE=7.113, RMSE=9.433
+    vs persistence: MAE=+12.5%, RMSE=+11.8%
+
+##############################################################################
+FOLD 8
+##############################################################################
+Train: 676
+Test:  48
+
+Persistence: MAE=6.521, RMSE=8.724
+Mean-change: MAE=6.513, RMSE=8.719
+
+  Experiment A: Current State
+    RF: MAE=5.877, RMSE=8.067
+    vs persistence: MAE=+9.9%, RMSE=+7.5%
+
+  Experiment B: Short History (lag1)
+    RF: MAE=5.753, RMSE=7.821
+    vs persistence: MAE=+11.8%, RMSE=+10.4%
+
+  Experiment C: Medium History (lag1/3/6)
+    RF: MAE=5.747, RMSE=7.581
+    vs persistence: MAE=+11.9%, RMSE=+13.1%
+
+  Experiment D: Full History (lag1/3/6/24 + rolling)
+    RF: MAE=5.741, RMSE=7.464
+    vs persistence: MAE=+12.0%, RMSE=+14.4%
+
+##############################################################################
+FOLD 9
+##############################################################################
+Train: 724
+Test:  48
+
+Persistence: MAE=4.833, RMSE=6.478
+Mean-change: MAE=4.888, RMSE=6.505
+
+  Experiment A: Current State
+    RF: MAE=4.288, RMSE=5.948
+    vs persistence: MAE=+11.3%, RMSE=+8.2%
+
+  Experiment B: Short History (lag1)
+    RF: MAE=4.076, RMSE=5.568
+    vs persistence: MAE=+15.7%, RMSE=+14.0%
+
+  Experiment C: Medium History (lag1/3/6)
+    RF: MAE=4.203, RMSE=5.669
+    vs persistence: MAE=+13.0%, RMSE=+12.5%
+
+  Experiment D: Full History (lag1/3/6/24 + rolling)
+    RF: MAE=4.146, RMSE=5.646
+    vs persistence: MAE=+14.2%, RMSE=+12.8%
+
+##############################################################################
+FOLD 10
+##############################################################################
+Train: 772
+Test:  48
+
+Persistence: MAE=5.146, RMSE=6.993
+Mean-change: MAE=5.152, RMSE=6.998
+
+  Experiment A: Current State
+    RF: MAE=5.285, RMSE=6.497
+    vs persistence: MAE=-2.7%, RMSE=+7.1%
+
+  Experiment B: Short History (lag1)
+    RF: MAE=5.025, RMSE=6.380
+    vs persistence: MAE=+2.3%, RMSE=+8.8%
+
+  Experiment C: Medium History (lag1/3/6)
+    RF: MAE=4.564, RMSE=5.982
+    vs persistence: MAE=+11.3%, RMSE=+14.5%
+
+  Experiment D: Full History (lag1/3/6/24 + rolling)
+    RF: MAE=4.526, RMSE=5.934
+    vs persistence: MAE=+12.1%, RMSE=+15.1%
+
+
+##############################################################################
+FINAL TEMPORAL-REDUCTION SUMMARY
+##############################################################################
+
+Total test observations: 480
+Persistence: MAE=5.583, RMSE=7.602
+Mean-change: MAE=5.604, RMSE=7.614
+
+Aggregate results:
+
+experiment                          description   mae  rmse  mae_improvement_pct  rmse_improvement_pct  mae_fold_wins  rmse_fold_wins
+         D Full History (lag1/3/6/24 + rolling) 5.197 7.080                6.916                 6.859              7               8
+         C            Medium History (lag1/3/6) 5.201 7.046                6.843                 7.314              7               8
+         B                 Short History (lag1) 5.219 7.154                6.526                 5.896              7               9
+         A                        Current State 5.270 7.258                5.615                 4.518              7               8
+
+##############################################################################
+CITY-LEVEL RESULTS
+##############################################################################
+
+experiment      city  test_rows  persistence_mae  rf_mae  mae_improvement_pct  persistence_rmse  rf_rmse  rmse_improvement_pct
+         A Bengaluru        240            4.992   4.729                5.265             6.880    6.630                 3.635
+         A     Delhi        240            6.175   5.811                5.899             8.261    7.837                 5.135
+         B Bengaluru        240            4.992   4.909                1.655             6.880    6.759                 1.751
+         B     Delhi        240            6.175   5.529               10.464             8.261    7.527                 8.882
+         C Bengaluru        240            4.992   4.875                2.339             6.880    6.642                 3.451
+         C     Delhi        240            6.175   5.528               10.485             8.261    7.427                10.091
+         D Bengaluru        240            4.992   4.909                1.647             6.880    6.759                 1.765
+         D     Delhi        240            6.175   5.485               11.175             8.261    7.388                10.562
+
+##############################################################################
+INCREMENTAL HISTORY VALUE
+##############################################################################
+
+A -> B:
+  MAE change: -0.051
+  RMSE change: -0.105
+
+B -> C:
+  MAE change: -0.018
+  RMSE change: -0.108
+
+C -> D:
+  MAE change: -0.004
+  RMSE change: +0.035
+
+##############################################################################
+TEMPORAL FEATURE RANKING
+##############################################################################
+
+ rank experiment                          description   mae  rmse  mae_improvement_pct  rmse_improvement_pct  mae_fold_wins  rmse_fold_wins
+    1          D Full History (lag1/3/6/24 + rolling) 5.197 7.080                6.916                 6.859              7               8
+    2          C            Medium History (lag1/3/6) 5.201 7.046                6.843                 7.314              7               8
+    3          B                 Short History (lag1) 5.219 7.154                6.526                 5.896              7               9
+    4          A                        Current State 5.270 7.258                5.615                 4.518              7               8
+
+==============================================================================
+TEMPORAL REDUCTION COMPLETE
+==============================================================================
