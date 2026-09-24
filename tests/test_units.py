@@ -1,6 +1,6 @@
 import pytest
 
-from air_quality_intelligence.analysis.units import (
+from air_quality_intelligence.transform.units import (
     UnitConversionError,
     normalize_concentration,
 )

@@ -107,3 +107,31 @@ def normalize_concentration(
         f"Unsupported unit '{unit}' "
         f"for pollutant '{pollutant}'."
     )
+
+
+# Known provider unit-label corrections.
+#
+# OpenAQ exposes the CPCB CO feed with a "ppb" unit label, but the values it
+# carries are ppm magnitudes. Station 17 sensor 12234782 reports CO around
+# 0.45 to 0.48 over the sampled window. Interpreted as ppb that is 0.00055
+# mg/m3, roughly three orders of magnitude below any ambient CO ever measured.
+# Interpreted as ppm it is 0.55 mg/m3, which is an ordinary urban reading.
+#
+# NO2 and SO2 from the same stations are labelled ppb and their magnitudes are
+# consistent with ppb (NO2 13.3 ppb -> 25 ug/m3, SO2 12.9 ppb -> 34 ug/m3),
+# so the mislabelling is specific to CO rather than general to the feed.
+PROVIDER_UNIT_CORRECTIONS: dict[tuple[str, str], str] = {
+    ("co", "ppb"): "ppm",
+}
+
+
+def correct_reported_unit(pollutant: str, unit: str) -> str:
+    """Correct a known provider unit-label error before conversion.
+
+    Returns the unit that should be used for conversion, which is the reported
+    unit unless the pollutant and unit pair is a documented provider error.
+    """
+
+    key = (pollutant.strip().lower(), _normalize_unit(unit))
+
+    return PROVIDER_UNIT_CORRECTIONS.get(key, unit)
