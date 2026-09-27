@@ -1,22 +1,42 @@
 """Multi-horizon CPCB AQI forecasting.
 
 The hourly AQI is built from 24-hour rolling pollutant averages. Two windows
-that are less than 24 hours apart therefore share most of their observations,
-which makes the persistence baseline extremely strong at short horizons for
+less than 24 hours apart therefore share most of their observations, which
+makes the persistence baseline extremely strong at short horizons for
 arithmetic rather than atmospheric reasons.
 
-Measured autocorrelation of the hardened AQI against window overlap:
+Measured on the 91-day corrected dataset, pooled across cities:
 
     horizon   corr(AQI_t, AQI_t+h)   window overlap
-    1h        0.997                  96%
-    6h        0.942                  75%
-    12h       0.783                  50%
-    18h       0.459                  25%
-    24h       -0.085                 0%
+    1h        0.999                  96%
+    6h        0.976                  75%
+    12h       0.924                  50%
+    18h       0.860                  25%
+    24h       0.793                   0%
 
-A forecast only adds value once the windows stop overlapping, so this module
-targets horizons at or beyond 18 hours. The 24-hour horizon also matches what
-CPCB publishes operationally.
+An earlier version of this docstring recorded 0.783 at 12h, 0.459 at 18h and
+**-0.085 at 24h**, and concluded that the autocorrelation tracked the overlap
+and vanished with it. Those figures came from the 30-day dataset and from an
+AQI that was wrong in several ways at once: the sub-index was anchored on the
+wrong breakpoint, every reading above the top band collapsed to 401, and CO
+was a thousand times too low. On the corrected data the conclusion does not
+hold, so it is withdrawn here rather than left standing.
+
+What the corrected numbers say is more interesting. Overlap does inflate the
+apparent skill at short horizons, which is why beating persistence below 24
+hours proves nothing. But at 24 hours the windows share no observations at
+all and the AQI is still autocorrelated at 0.79. That residual is real
+atmospheric persistence: weather regimes outlast a day. It is why persistence
+is a serious baseline at 24 hours rather than a straw man, and why a model
+that extrapolates the trend can beat it while a feature-rich regressor does
+not.
+
+This module targets horizons at or beyond 18 hours. The 24-hour horizon also
+matches what CPCB publishes operationally.
+
+The table is reproduced by `dashboard.data.window_overlap_table`, which
+computes it from the feature table rather than restating it, so it cannot go
+stale the way this docstring did.
 """
 
 from __future__ import annotations

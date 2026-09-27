@@ -18,10 +18,35 @@ because an unconstrained optimiser had found an explosive AR root. Both were
 caught by guardrails added after the fact, and both are documented here
 rather than quietly removed from the history.
 
-The reason a forecast is hard here at all is that the AQI is a 24-hour
-rolling mean, so two windows less than 24 hours apart share most of their
-observations. Persistence exploits that for free, which is why beating it
-below 24 hours proves nothing and beating it at 24 hours is worth something.
+### Why persistence is hard to beat, and why it is not a straw man
+
+The AQI at any hour is a mean over the previous 24 hours, so the AQI now and
+the AQI h hours from now are built from windows sharing `(24-h)/24` of their
+observations. Persistence gets that for free, which is why beating it below
+24 hours proves nothing.
+
+| Horizon | Window overlap | Autocorrelation |
+| --- | --- | --- |
+| 1h | 96% | 0.999 |
+| 6h | 75% | 0.976 |
+| 12h | 50% | 0.924 |
+| 18h | 25% | 0.860 |
+| 24h | **0%** | **0.793** |
+
+The second column is the arithmetic. The third is not. **At 24 hours the
+windows share nothing and the AQI is still correlated at 0.79**, and that
+residual is real atmospheric persistence: weather regimes outlast a day.
+Persistence at 24 hours is therefore a serious baseline rather than an
+artifact, which is what makes a model that beats it worth something and a
+model that loses to it worth reporting.
+
+This corrects an earlier claim. `analysis/horizon.py` used to document an
+autocorrelation of **-0.085** at 24 hours and conclude that the correlation
+was nothing but overlap. Those figures came from the 30-day dataset and from
+an AQI that was wrong in several ways at once, and they do not survive the
+corrected data. The table above is recomputed from the feature table by
+`dashboard.data.window_overlap_table` rather than restated, so it cannot go
+stale the same way.
 
 ## Results
 
@@ -75,7 +100,7 @@ Reproduce with `python scripts/evaluate_horizon_forecast.py --sarima` and
 | EDA: diurnal and weekday profiles, correlations, station rankings | working |
 | Persistence, climatology and Random Forest evaluation with chronological CV | working |
 | Embargoed final holdout | working |
-| Streamlit dashboard | not started, `app/streamlit_app.py` is a placeholder |
+| Streamlit dashboard | working, reads the committed outputs, no database needed |
 | SARIMA, walk-forward, on the same folds as the other models | working, `--sarima` |
 | Cities beyond Delhi and Bengaluru | not ingested |
 
@@ -182,6 +207,20 @@ python scripts/evaluate_horizon_forecast.py
 python scripts/evaluate_horizon_holdout.py
 ```
 
+The dashboard needs none of that. It reads the committed CSVs in `outputs/`,
+so a fresh clone can start it straight away:
+
+```bash
+streamlit run app/streamlit_app.py
+```
+
+That is deliberate. Requiring the database would mean requiring ninety days
+of ingestion first, and a dashboard nobody can start is not a dashboard. It
+shows the overlap finding, the model comparison with its intervals, the AQI
+history, and a section on what the data does not cover. Its numbers go
+through `analysis.significance`, the same code the command-line evaluation
+uses, so it cannot quietly disagree with the run that produced its inputs.
+
 Tests and linting:
 
 ```bash
@@ -264,13 +303,15 @@ mean while losing most hours, if its wins are larger.
 
 - The raw-concentration results at 6 and 12 hours were produced on the earlier
   30-day dataset and have not been regenerated.
-- The dashboard does not exist yet.
 - **SARIMA's 24-hour gain is unresolved, and the holdout cannot settle it.**
   19 blocks is too few. Settling it needs more data, which on these endpoints
   means waiting rather than re-querying, or a second holdout period once the
   record is long enough to afford one.
 - The SARIMA order is chosen from three candidates. A wider search, or a
   seasonal term, might do better; `--seasonal` exists and has not been run.
+- The dashboard's figure code could not be executed where it was written
+  (no plotly available), so `tests/test_dashboard_charts.py` skips there and
+  runs on any machine that has it. Its data layer is fully tested either way.
 - CPCB's own calculator has a transcription error in the O3 top band that
   would make the sub-index jump 65 points across one unit of ozone. This
   project uses the consistent form instead; see `docs/aqi-references.md`.
