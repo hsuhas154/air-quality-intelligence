@@ -215,7 +215,7 @@ def main():
     development_parts = []
     holdout_parts = []
 
-    for city, group in data.groupby("city"):
+    for _city, group in data.groupby("city"):
         group = (
             group
             .sort_values("hour")

@@ -8,7 +8,6 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from air_quality_intelligence.config.settings import settings
 
-
 MAX_PAGE_SIZE = 1000
 
 

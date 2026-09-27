@@ -833,7 +833,7 @@ def main() -> None:
 
     city_rows = []
 
-    for experiment, description in experiments.items():
+    for experiment, _description in experiments.items():
 
         group = predictions_df[
             predictions_df["experiment"]

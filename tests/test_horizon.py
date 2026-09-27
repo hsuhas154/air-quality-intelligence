@@ -40,7 +40,8 @@ def test_target_uses_real_timestamps_not_positional_shift():
 
     have = out.dropna(subset=[AQI_COLUMN, target])
     for _, row in have.iterrows():
-        future = out[(out["city"] == row["city"]) & (out["hour"] == row["hour"] + pd.Timedelta(hours=18))]
+        later = row["hour"] + pd.Timedelta(hours=18)
+        future = out[(out["city"] == row["city"]) & (out["hour"] == later)]
         assert not future.empty
         assert future.iloc[0][AQI_COLUMN] == row[target]
 

@@ -11,7 +11,6 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error
@@ -36,6 +35,10 @@ RANDOM_FOREST_PARAMS = {
 MINIMUM_TRAINING_DAYS = 7
 TEST_OBSERVATIONS_PER_CITY = 16
 NUMBER_OF_FOLDS = 10
+
+# Folds testing less than this share of the evaluable record produce a metric
+# that describes a slice rather than the period, and the run says so loudly.
+MINIMUM_FOLD_COVERAGE = 0.40
 
 OUTPUT_DIR = Path("outputs")
 
@@ -64,11 +67,39 @@ def evaluate_horizon(data: pd.DataFrame, horizon: int) -> tuple[pd.DataFrame, pd
 
     print(f"\nHorizon {horizon}h")
     print(f"  AQI-evaluable rows: {len(evaluable)}")
-    print(f"  Folds: {len(folds)} x {TEST_OBSERVATIONS_PER_CITY * data['city'].nunique()} test rows")
+    per_fold = TEST_OBSERVATIONS_PER_CITY * data["city"].nunique()
+    print(f"  Folds: {len(folds)} x {per_fold} test rows")
 
     if not folds:
         print("  Not enough data at this horizon.")
         return pd.DataFrame(), pd.DataFrame()
+
+    # Fold coverage guard.
+    #
+    # create_expanding_folds advances its cutoff to the last test timestamp, so
+    # a small test block moves the window forward only a few hours per fold. On
+    # a long record a fixed fold count can therefore exhaust itself inside the
+    # first days and report a metric measured on an unrepresentative slice.
+    # This happened: 10 folds of 16 observations per city covered 3 to 12 July
+    # of an 86-day record, 13% of the rows, and the headline number from it had
+    # to be retracted.
+    tested = pd.concat([test for _, test in folds])
+    span = evaluable["hour"].max() - evaluable["hour"].min()
+    covered = tested["hour"].max() - tested["hour"].min()
+    fraction = len(tested) / len(evaluable)
+
+    print(
+        f"  Fold coverage: {tested['hour'].min()} to {tested['hour'].max()} "
+        f"({covered.days}d of {span.days}d, {fraction:.0%} of evaluable rows)"
+    )
+
+    if fraction < MINIMUM_FOLD_COVERAGE:
+        print(
+            f"  WARNING: the folds test only {fraction:.0%} of the evaluable "
+            f"record. This metric is not representative of the full period. "
+            f"Raise --test-per-city or the fold count until coverage is at "
+            f"least {MINIMUM_FOLD_COVERAGE:.0%}."
+        )
 
     features = model_feature_names(data)
     rows = []
@@ -115,8 +146,12 @@ def evaluate_horizon(data: pd.DataFrame, horizon: int) -> tuple[pd.DataFrame, pd
 
     summary = pd.DataFrame(summary)
     baseline = summary.loc[summary["model"] == "persistence"].iloc[0]
-    summary["mae_gain_vs_persistence_pct"] = (baseline["mae"] - summary["mae"]) / baseline["mae"] * 100
-    summary["rmse_gain_vs_persistence_pct"] = (baseline["rmse"] - summary["rmse"]) / baseline["rmse"] * 100
+    summary["mae_gain_vs_persistence_pct"] = (
+        (baseline["mae"] - summary["mae"]) / baseline["mae"] * 100
+    )
+    summary["rmse_gain_vs_persistence_pct"] = (
+        (baseline["rmse"] - summary["rmse"]) / baseline["rmse"] * 100
+    )
 
     for _, row in summary.iterrows():
         print(
@@ -130,9 +165,13 @@ def evaluate_horizon(data: pd.DataFrame, horizon: int) -> tuple[pd.DataFrame, pd
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--horizons", type=int, nargs="+", default=[18, 24])
+    parser.add_argument("--test-per-city", type=int, default=TEST_OBSERVATIONS_PER_CITY,
+                        help="Test observations per city per fold. Raise this on long records.")
     parser.add_argument("--csv", type=str, default=None,
                         help="Read features from CSV instead of the database.")
     args = parser.parse_args()
+
+    globals()["TEST_OBSERVATIONS_PER_CITY"] = args.test_per_city
 
     features = load_features(args.csv)
     print(f"Feature rows: {len(features)}  cities: {features['city'].nunique()}")

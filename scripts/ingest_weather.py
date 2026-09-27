@@ -7,7 +7,6 @@ from air_quality_intelligence.db.engine import get_engine
 from air_quality_intelligence.db.weather import insert_weather
 from air_quality_intelligence.ingestion.open_meteo import fetch_hourly_weather
 
-
 DEFAULT_HISTORY_DAYS = int(os.environ.get("AQI_HISTORY_DAYS", "90"))
 
 # The Open-Meteo forecast endpoint serves roughly 92 days of past data.

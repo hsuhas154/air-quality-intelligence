@@ -8,13 +8,21 @@ from air_quality_intelligence.config.settings import settings
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
-def fetch_hourly_weather(latitude: float, longitude: float, start_date: str, end_date: str) -> pd.DataFrame:
+def fetch_hourly_weather(
+    latitude: float,
+    longitude: float,
+    start_date: str,
+    end_date: str,
+) -> pd.DataFrame:
     params = {
         "latitude": latitude,
         "longitude": longitude,
         "start_date": start_date,
         "end_date": end_date,
-        "hourly": "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,boundary_layer_height",
+        "hourly": (
+            "temperature_2m,relative_humidity_2m,wind_speed_10m,"
+            "wind_direction_10m,boundary_layer_height"
+        ),
         "timezone": "UTC",
     }
     with httpx.Client(timeout=30) as client:

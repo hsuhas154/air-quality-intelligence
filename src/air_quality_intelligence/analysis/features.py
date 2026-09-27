@@ -219,7 +219,7 @@ def _add_time_based_rolling_features(
                 dtype="float64",
             )
 
-            for city, city_group in df.groupby(
+            for _city, city_group in df.groupby(
                 "city",
                 sort=False,
             ):

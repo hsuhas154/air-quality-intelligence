@@ -153,7 +153,7 @@ def test_group_columns_are_processed_independently():
     assert len(result) == 2
 
     values = dict(
-        zip(result["station_id"], result["value"])
+        zip(result["station_id"], result["value"], strict=True)
     )
 
     assert values["A"] == 10.0

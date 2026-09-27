@@ -57,7 +57,9 @@ def test_a_window_longer_than_one_page_is_fully_retrieved(monkeypatch):
 
     _install(monkeypatch, pages)
 
-    df = fetch_sensor_measurements(1, datetime(2026, 7, 1, tzinfo=UTC), datetime(2026, 8, 1, tzinfo=UTC))
+    df = fetch_sensor_measurements(
+        1, datetime(2026, 7, 1, tzinfo=UTC), datetime(2026, 8, 1, tzinfo=UTC)
+    )
 
     assert len(df) == total
     assert df["ts"].nunique() == total
@@ -73,7 +75,9 @@ def test_overlapping_pages_are_not_double_counted(monkeypatch):
 
     _install(monkeypatch, pages)
 
-    df = fetch_sensor_measurements(1, datetime(2026, 7, 1, tzinfo=UTC), datetime(2026, 8, 1, tzinfo=UTC))
+    df = fetch_sensor_measurements(
+        1, datetime(2026, 7, 1, tzinfo=UTC), datetime(2026, 8, 1, tzinfo=UTC)
+    )
 
     assert len(df) == df["ts"].nunique()
 
@@ -88,7 +92,9 @@ def test_a_short_page_ends_pagination(monkeypatch):
 
     _install(monkeypatch, pages)
 
-    df = fetch_sensor_measurements(1, datetime(2026, 7, 1, tzinfo=UTC), datetime(2026, 7, 2, tzinfo=UTC))
+    df = fetch_sensor_measurements(
+        1, datetime(2026, 7, 1, tzinfo=UTC), datetime(2026, 7, 2, tzinfo=UTC)
+    )
 
     assert len(df) == 17
     assert calls == [1]

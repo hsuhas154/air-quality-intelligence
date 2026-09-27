@@ -1041,7 +1041,7 @@ def main() -> None:
 
     city_rows = []
 
-    for experiment, description in (
+    for experiment, _description in (
         EXPERIMENTS.items()
     ):
 

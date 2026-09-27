@@ -15,7 +15,13 @@ def sarima_forecast(series: pd.Series, horizon: int = 24) -> np.ndarray:
     clean = pd.Series(series, dtype="float64").dropna()
     if len(clean) < 48:
         return naive_forecast(clean, horizon)
-    model = SARIMAX(clean, order=(1, 0, 1), seasonal_order=(1, 1, 1, 24), enforce_stationarity=False, enforce_invertibility=False)
+    model = SARIMAX(
+        clean,
+        order=(1, 0, 1),
+        seasonal_order=(1, 1, 1, 24),
+        enforce_stationarity=False,
+        enforce_invertibility=False,
+    )
     fitted = model.fit(disp=False)
     return np.asarray(fitted.forecast(horizon), dtype=float)
 

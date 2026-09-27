@@ -147,7 +147,7 @@ def calculate_strict_averages(
             .reset_index()
         )
 
-        for column, key in zip(group_cols, keys[:-1]):
+        for column, key in zip(group_cols, keys[:-1], strict=True):
             result[column] = key
 
         result[pollutant_col] = pollutant
