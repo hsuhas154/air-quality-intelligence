@@ -261,27 +261,51 @@ def main() -> None:
             f"   MAE {row['mae_gain_pct']:+6.1f}%   RMSE {row['rmse_gain_pct']:+6.1f}%"
         )
 
+    # Every model, not just the Random Forest. A city split that shows one
+    # model hides where a gain actually comes from: an average over two
+    # cities can be carried entirely by one of them.
     city_rows = []
     print("\nBy city:")
+
     for city, group in predictions.groupby("city"):
         truth = group[target].to_numpy()
-        rf_mae = mean_absolute_error(truth, group["random_forest"])
-        pe_mae = mean_absolute_error(truth, group["persistence"])
-        rf_rmse = root_mean_squared_error(truth, group["random_forest"])
-        pe_rmse = root_mean_squared_error(truth, group["persistence"])
-        city_rows.append(
-            {
-                "city": city, "n": len(group),
-                "rf_mae": rf_mae, "persistence_mae": pe_mae,
-                "rf_rmse": rf_rmse, "persistence_rmse": pe_rmse,
-                "mae_gain_pct": (pe_mae - rf_mae) / pe_mae * 100,
-                "rmse_gain_pct": (pe_rmse - rf_rmse) / pe_rmse * 100,
-            }
-        )
-        print(
-            f"  {city:10s} n={len(group):4d}  RF MAE {rf_mae:8.4f} vs {pe_mae:8.4f}"
-            f"  ({(pe_mae - rf_mae) / pe_mae * 100:+5.1f}%)"
-        )
+        baseline_mae = mean_absolute_error(truth, group["persistence"])
+        baseline_rmse = root_mean_squared_error(truth, group["persistence"])
+
+        print(f"  {city} (n={len(group)}), against persistence:")
+
+        for name in models:
+            if name == "persistence" or name not in group.columns:
+                continue
+
+            usable = group[[target, name]].dropna()
+
+            if usable.empty:
+                continue
+
+            city_mae = mean_absolute_error(usable[target], usable[name])
+            city_rmse = root_mean_squared_error(usable[target], usable[name])
+
+            city_rows.append(
+                {
+                    "city": city,
+                    "model": name,
+                    "n": len(usable),
+                    "mae": city_mae,
+                    "persistence_mae": baseline_mae,
+                    "rmse": city_rmse,
+                    "persistence_rmse": baseline_rmse,
+                    "mae_gain_pct": (baseline_mae - city_mae) / baseline_mae * 100,
+                    "rmse_gain_pct": (baseline_rmse - city_rmse)
+                    / baseline_rmse
+                    * 100,
+                }
+            )
+
+            print(
+                f"    {name:14s} MAE {city_mae:8.4f} vs {baseline_mae:8.4f}"
+                f"  ({(baseline_mae - city_mae) / baseline_mae * 100:+5.1f}%)"
+            )
 
     rf_error = (predictions["random_forest"] - predictions[target]).abs()
     pe_error = (predictions["persistence"] - predictions[target]).abs()

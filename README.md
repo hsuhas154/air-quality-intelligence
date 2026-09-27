@@ -4,12 +4,61 @@ Hourly CPCB air quality index forecasting for Indian cities, built on OpenAQ
 observations and Open-Meteo weather, with the forecasting question treated as
 something to test rather than assume.
 
-The central finding so far is a negative one, and it is the point of the
-project: at forecast horizons shorter than a day, a model that beats the
-persistence baseline on paper is usually only exploiting the fact that the AQI
-is a 24-hour rolling mean, so two windows less than 24 hours apart share most
-of their observations. Once that overlap is removed, the easy win disappears.
-`docs/` and `results/` carry the working.
+Two findings, and the second one is the point of the project.
+
+**A four-parameter SARIMA beats a forty-five-feature Random Forest, and at 18
+hours it beats persistence too.** The Random Forest was given weather, lags,
+station counts and six pollutants. It lost to a univariate model that sees
+nothing but the AQI's own history, by 25 percent at 24 hours.
+
+**Most apparent wins in this project turned out to be artifacts, and finding
+that out is the work.** A 22 percent improvement came from folds covering 13
+percent of the record. A later run reported a mean absolute error of 2.6e54,
+because an unconstrained optimiser had found an explosive AR root. Both were
+caught by guardrails added after the fact, and both are documented here
+rather than quietly removed from the history.
+
+The reason a forecast is hard here at all is that the AQI is a 24-hour
+rolling mean, so two windows less than 24 hours apart share most of their
+observations. Persistence exploits that for free, which is why beating it
+below 24 hours proves nothing and beating it at 24 hours is worth something.
+
+## Results
+
+24-hour horizon, against persistence, with moving-block bootstrap intervals
+on the mean gain in MAE:
+
+| Model | Cross-validation, n=1340 | Embargoed holdout, n=451 |
+| --- | --- | --- |
+| SARIMA | +0.68 [-0.59, +2.08] | +1.31 [-0.14, +3.00] |
+| Random Forest | -4.79 [-8.81, -1.37] | -0.53 [-2.27, +3.54] |
+| Climatology | -19.54 [-25.65, -13.32] | -4.74 [-10.80, +3.30] |
+
+18-hour horizon, cross-validation only:
+
+| Model | Mean gain in MAE | Win rate |
+| --- | --- | --- |
+| SARIMA | **+1.43 [+0.34, +2.83]** | 55.8% |
+| Random Forest | -2.39 [-4.35, -0.18] | 46.4% |
+| Climatology | -23.37 [-29.66, -17.11] | 17.2% |
+
+What that supports, and what it does not:
+
+- **At 18 hours SARIMA beats persistence.** The interval excludes zero.
+- **At 24 hours it is not established.** Both point estimates are positive
+  and cross-validation and the holdout agree on the direction, but neither
+  interval excludes zero. The honest statement is "consistent with a gain,
+  not demonstrated".
+- **The Random Forest is worse than persistence**, clearly so in
+  cross-validation at both horizons.
+- **The holdout resolves almost nothing**, and that is a property of its
+  size rather than of the models. 451 observations is 19 blocks of 24 hours.
+  Climatology's 29 percent deficit does not clear the interval either, which
+  is why a non-significant result here is reported as "not resolved" with
+  its block count attached, never as "indistinguishable".
+
+Reproduce with `python scripts/evaluate_horizon_forecast.py --sarima` and
+`python scripts/evaluate_horizon_holdout.py --sarima`.
 
 ## What is built
 
@@ -216,6 +265,12 @@ mean while losing most hours, if its wins are larger.
 - The raw-concentration results at 6 and 12 hours were produced on the earlier
   30-day dataset and have not been regenerated.
 - The dashboard does not exist yet.
+- **SARIMA's 24-hour gain is unresolved, and the holdout cannot settle it.**
+  19 blocks is too few. Settling it needs more data, which on these endpoints
+  means waiting rather than re-querying, or a second holdout period once the
+  record is long enough to afford one.
+- The SARIMA order is chosen from three candidates. A wider search, or a
+  seasonal term, might do better; `--seasonal` exists and has not been run.
 - CPCB's own calculator has a transcription error in the O3 top band that
   would make the sub-index jump 65 points across one unit of ozone. This
   project uses the consistent form instead; see `docs/aqi-references.md`.

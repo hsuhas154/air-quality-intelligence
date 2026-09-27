@@ -110,7 +110,7 @@ def test_a_better_model_is_reported_as_better():
     assert result.win_rate > 0.5
 
 
-def test_an_identical_model_is_indistinguishable():
+def test_an_identical_model_is_not_resolved_rather_than_declared_equal():
     actual = rng(6).normal(100, 20, 600)
     baseline = actual + rng(7).normal(0, 8, 600)
 
@@ -118,7 +118,41 @@ def test_an_identical_model_is_indistinguishable():
 
     assert result.mae_difference == pytest.approx(0.0)
     assert not result.significant
-    assert result.verdict == "indistinguishable from the baseline"
+    assert result.verdict.startswith("not resolved")
+
+
+def test_a_real_gap_can_go_unresolved_when_blocks_are_few():
+    """Failing to reject is not evidence of equivalence.
+
+    Four 24-hour blocks whose gains alternate in sign: the model is worse on
+    average, but no four blocks can establish it. This is the holdout's
+    situation. 451 observations give 19 blocks, and at that size even
+    climatology's 29 percent deficit does not clear the interval. Reporting
+    that as "indistinguishable from persistence" would be a false claim
+    about climatology rather than a true one about the test.
+    """
+    gains = np.repeat([20.0, -25.0, 18.0, -23.0], 24)
+    baseline_error = np.full(96, 30.0)
+    model_error = baseline_error - gains
+
+    result = compare_to_baseline(
+        np.zeros(96), model_error, baseline_error, model_name="weak"
+    )
+
+    assert result.model_mae > result.baseline_mae
+    assert not result.significant
+    assert result.effective_blocks == 4
+    assert result.verdict == "not resolved, 4 blocks"
+
+
+def test_the_effective_block_count_is_reported():
+    actual = rng(23).normal(100, 20, 451)
+    baseline = actual + rng(24).normal(0, 8, 451)
+
+    result = compare_to_baseline(actual, baseline.copy(), baseline, model_name="copy")
+
+    assert result.block_hours == 24
+    assert result.effective_blocks == 19
 
 
 def test_a_worse_model_is_reported_as_worse():

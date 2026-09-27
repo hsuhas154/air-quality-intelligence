@@ -53,7 +53,8 @@ class PairedComparison:
     ci_low: float
     ci_high: float
     win_rate: float
-    blocks: int
+    block_hours: int
+    effective_blocks: int
 
     @property
     def significant(self) -> bool:
@@ -63,10 +64,26 @@ class PairedComparison:
 
     @property
     def verdict(self) -> str:
-        if not self.significant:
-            return "indistinguishable from the baseline"
+        """What the interval supports, and nothing beyond it.
 
-        return "better than the baseline" if self.mae_difference > 0 else "worse"
+        A non-significant result is reported as "not resolved", never as
+        "indistinguishable" or "no difference". Failing to reject is not
+        evidence of equivalence, and here the distinction is not academic:
+        the holdout carries 451 observations, which is 19 blocks of 24
+        hours, and at that size even climatology's 29 percent deficit does
+        not clear the interval. Calling that "indistinguishable from
+        persistence" would be a false statement about climatology rather
+        than a true one about the test.
+
+        The block count travels with the verdict so that a wide interval
+        reads as what it is: too few independent units to resolve the
+        question, rather than an answer of no.
+        """
+
+        if self.significant:
+            return "better than the baseline" if self.mae_difference > 0 else "worse"
+
+        return f"not resolved, {self.effective_blocks} blocks"
 
 
 def moving_block_bootstrap(
@@ -147,6 +164,7 @@ def compare_to_baseline(
 
     actual, model, baseline = actual[usable], model[usable], baseline[usable]
 
+    block = max(1, min(int(block_hours), int(usable.sum())))
     model_error = np.abs(actual - model)
     baseline_error = np.abs(actual - baseline)
     differences = baseline_error - model_error
@@ -165,7 +183,8 @@ def compare_to_baseline(
         ci_low=low,
         ci_high=high,
         win_rate=float((differences > 0).mean()),
-        blocks=int(max(1, min(block_hours, differences.size))),
+        block_hours=block,
+        effective_blocks=int(np.ceil(differences.size / block)),
     )
 
 
