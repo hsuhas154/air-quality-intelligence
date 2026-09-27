@@ -27,7 +27,7 @@ of their observations. Once that overlap is removed, the easy win disappears.
 | Persistence, climatology and Random Forest evaluation with chronological CV | working |
 | Embargoed final holdout | working |
 | Streamlit dashboard | not started, `app/streamlit_app.py` is a placeholder |
-| SARIMA | present in `forecast/baseline.py`, never benchmarked |
+| SARIMA, walk-forward, on the same folds as the other models | working, `--sarima` |
 | Cities beyond Delhi and Bengaluru | not ingested |
 
 ## Data
@@ -159,9 +159,60 @@ The things that make the numbers trustworthy, and the reasons each is there:
 - **A final holdout** that was embargoed and left untouched until the model
   design was fixed.
 
+### On benchmarking SARIMA
+
+`python scripts/evaluate_horizon_forecast.py --sarima` scores it beside
+persistence, climatology and the Random Forest, on the same folds, the same
+target and the same embargo. Three things make that comparison honest rather
+than decorative:
+
+- **The series keeps its gaps.** The AQI has holes, including three days at
+  the end of August. The previous implementation called `dropna()` before
+  fitting, which closes the holes and shifts every later observation earlier,
+  so a 24-hour seasonal term was being estimated against a series that was no
+  longer hourly.
+- **Parameters come from the training window only.** The order is chosen by
+  AIC over a small candidate set, refitted per fold. At each test hour the
+  filter is advanced with the observations that existed then, and asked for a
+  forecast; the coefficients never see the test period.
+- **A failed fit is reported, not replaced.** The previous implementation
+  fell back to the naive forecast below 48 points, which would have published
+  persistence's score under SARIMA's name. Rows SARIMA cannot predict are
+  counted, and if it covers fewer rows than the other models, every model is
+  scored again on exactly the rows it managed.
+
+It is off by default because it fits every candidate order per fold per city
+and then steps a Kalman filter through every hour.
+
+The first run of it reported a mean absolute error of 2.6e54. That was not a
+bad forecast, it was a divergent one: `enforce_stationarity` was off, so the
+optimiser was free to settle on an AR root inside the unit circle, and an
+explosive process compounds like phi to the power of the walk. The AQI makes
+that trap easy to fall into, because a 24-hour rolling mean has a nearly flat
+differenced series and therefore a nearly flat likelihood surface for an
+unconstrained optimiser to wander across. The fit is now constrained, and a
+forecast outside `[0, 5x the training maximum]` is discarded and counted
+rather than scored. It is never clamped: clamping a divergent forecast to a
+plausible number hides the divergence inside a respectable-looking error.
+
+## Is a difference real?
+
+Every model is also reported against persistence as a paired comparison, with
+a **moving-block bootstrap** interval on the mean gain.
+
+The block matters. Consecutive hours of a 24-hour rolling mean share almost
+all their observations, so a run of good hours is one event rather than
+twenty-four independent successes. An interval that resamples single hours
+treats them as independent and comes out narrower than the data earns.
+Resampling 24-hour blocks keeps the dependence where it belongs.
+
+The win rate is printed alongside, because the two answer different
+questions: the interval says whether the average gain is real, the win rate
+says how often you would actually prefer the model. A model can win on the
+mean while losing most hours, if its wins are larger.
+
 ## Known gaps
 
-- SARIMA is implemented but has never been benchmarked against persistence.
 - The raw-concentration results at 6 and 12 hours were produced on the earlier
   30-day dataset and have not been regenerated.
 - The dashboard does not exist yet.

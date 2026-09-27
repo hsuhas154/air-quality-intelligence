@@ -36,6 +36,16 @@ from air_quality_intelligence.analysis.horizon import (
     build_matrices,
     model_feature_names,
 )
+from air_quality_intelligence.analysis.significance import (
+    compare_to_baseline,
+    format_comparison,
+)
+from air_quality_intelligence.forecast.sarima import (
+    DEFAULT_ORDERS,
+    SEASONAL_ORDER,
+    to_regular_hourly,
+    walk_forward_forecast,
+)
 
 HORIZON = 24
 HOLDOUT_FRACTION = 0.20
@@ -110,6 +120,12 @@ def main() -> None:
                              "database. Use --write-csv to save one.")
     parser.add_argument("--write-csv", type=str, default=None,
                         help="Save the features this run used to this path.")
+    parser.add_argument("--sarima", action="store_true",
+                        help="Also score SARIMA on the holdout. This spends "
+                             "the holdout on a fourth model, so run it once "
+                             "and keep whatever it says.")
+    parser.add_argument("--seasonal", action="store_true",
+                        help="Give SARIMA a 24-hour seasonal term.")
     args = parser.parse_args()
 
     target = TARGET_TEMPLATE.format(horizon=HORIZON)
@@ -166,17 +182,68 @@ def main() -> None:
     predictions["persistence"] = holdout[AQI_COLUMN].to_numpy()
     predictions["climatology"] = float(development[target].mean())
 
-    actual = predictions[target].to_numpy()
+    models = ("random_forest", "persistence", "climatology")
+
+    if args.sarima:
+        print("\nSARIMA walk-forward on the holdout period:")
+
+        # Created up front so a city that produces nothing leaves NaN rather
+        # than an absent column.
+        predictions["sarima"] = float("nan")
+
+        # One cutoff per city: the last development hour. The walk then runs
+        # forward through the holdout exactly as it does in cross-validation,
+        # so the holdout score is produced the same way the fold scores were.
+        for city, group in holdout.groupby("city"):
+            series = to_regular_hourly(
+                data[data["city"] == city],
+                time_column="hour",
+                value_column=AQI_COLUMN,
+            )
+            cutoff = development[development["city"] == city]["hour"].max()
+
+            city_predictions, fit_report = walk_forward_forecast(
+                series,
+                cutoff,
+                list(group["hour"]),
+                HORIZON,
+                city=str(city),
+                orders=DEFAULT_ORDERS,
+                seasonal_order=SEASONAL_ORDER if args.seasonal else None,
+            )
+
+            aic = f"{fit_report.aic:.1f}" if fit_report.aic is not None else "none"
+            print(
+                f"  {city:<10} order {fit_report.order} AIC {aic:>9}  "
+                f"predicted {fit_report.predictions:3d}  "
+                f"failed {fit_report.failures:3d}  "
+                f"diverged {fit_report.diverged:3d}"
+            )
+
+            for note in fit_report.notes[:3]:
+                print(f"    note: {note}")
+
+            mask = predictions["city"] == city
+            predictions.loc[mask, "sarima"] = [
+                city_predictions.get(hour, float("nan"))
+                for hour in predictions.loc[mask, "hour"]
+            ]
+
+        models = (*models, "sarima")
 
     rows = []
-    for name in ("random_forest", "persistence", "climatology"):
-        estimate = predictions[name].to_numpy()
+    for name in models:
+        usable = predictions[[target, name]].dropna()
+
+        if usable.empty:
+            continue
+
         rows.append(
             {
                 "model": name,
-                "n": len(actual),
-                "mae": mean_absolute_error(actual, estimate),
-                "rmse": root_mean_squared_error(actual, estimate),
+                "n": len(usable),
+                "mae": mean_absolute_error(usable[target], usable[name]),
+                "rmse": root_mean_squared_error(usable[target], usable[name]),
             }
         )
 
@@ -226,6 +293,27 @@ def main() -> None:
     print(f"  Persistence closer   : {losses}")
     print(f"  Ties                 : {len(predictions) - wins - losses}")
     print(f"  Random Forest wins {wins / len(predictions) * 100:.1f}% of observations")
+
+    print(
+        "\nPaired against persistence, with a moving-block bootstrap of the "
+        "mean gain.\nConsecutive hours of a 24-hour rolling mean share most "
+        "of their observations,\nso an interval that treats them as "
+        "independent claims more than it should:"
+    )
+
+    for name in models:
+        if name == "persistence" or name not in predictions.columns:
+            continue
+
+        comparison = compare_to_baseline(
+            predictions[target].to_numpy(),
+            predictions[name].to_numpy(),
+            predictions["persistence"].to_numpy(),
+            model_name=name,
+        )
+
+        if comparison is not None:
+            print(format_comparison(comparison, indent="  "))
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     summary.to_csv(OUTPUT_DIR / "horizon_holdout_results.csv", index=False)

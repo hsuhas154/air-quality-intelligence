@@ -5,6 +5,7 @@ Run from the project root:
     python scripts/evaluate_horizon_forecast.py
     python scripts/evaluate_horizon_forecast.py --horizons 18 24
     python scripts/evaluate_horizon_forecast.py --write-csv outputs/feature_table.csv
+    python scripts/evaluate_horizon_forecast.py --sarima
 """
 
 from __future__ import annotations
@@ -23,6 +24,16 @@ from air_quality_intelligence.analysis.horizon import (
     build_matrices,
     create_expanding_folds,
     model_feature_names,
+)
+from air_quality_intelligence.analysis.significance import (
+    compare_to_baseline,
+    format_comparison,
+)
+from air_quality_intelligence.forecast.sarima import (
+    DEFAULT_ORDERS,
+    SEASONAL_ORDER,
+    to_regular_hourly,
+    walk_forward_forecast,
 )
 
 RANDOM_FOREST_PARAMS = {
@@ -53,6 +64,11 @@ MINIMUM_FOLD_COVERAGE = 0.40
 # as the dataset grows. The target is below 1.0 because the earliest rows go
 # to the first fold's training window and cannot be tested.
 TARGET_FOLD_COVERAGE = 0.60
+
+# Below this share of test rows, a SARIMA score is reported with a warning.
+# The rows a diverging model fails on are the hard ones, so scoring it on the
+# survivors reads better than the model deserves.
+MINIMUM_SARIMA_COVERAGE = 0.90
 
 # Set from the data in main(). Kept as a module global because
 # evaluate_horizon reads it.
@@ -89,7 +105,126 @@ def load_features(csv: str | None) -> pd.DataFrame:
     return load_hourly_features(get_engine())
 
 
-def evaluate_horizon(data: pd.DataFrame, horizon: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+def sarima_predictions(
+    data: pd.DataFrame,
+    folds: list,
+    horizon: int,
+    *,
+    seasonal: bool,
+) -> dict[tuple[str, pd.Timestamp], float]:
+    """Walk-forward SARIMA predictions on the folds the other models use.
+
+    Sharing the fold objects rather than rebuilding them is deliberate. A
+    separate benchmark script with its own splitting logic is free to drift
+    from this one, and a comparison across two different sets of test rows
+    says nothing.
+
+    SARIMA is fitted per city, because it is a single-series model and
+    pooling two cities into one series would splice Delhi onto Bengaluru.
+    """
+
+    series_by_city = {
+        city: to_regular_hourly(
+            group, time_column="hour", value_column=AQI_COLUMN
+        )
+        for city, group in data.groupby("city")
+    }
+
+    seasonal_order = SEASONAL_ORDER if seasonal else None
+    predictions: dict[tuple[str, pd.Timestamp], float] = {}
+
+    for fold_number, (cutoff, test) in enumerate(folds, start=1):
+        for city, group in test.groupby("city"):
+            series = series_by_city.get(city)
+
+            if series is None or series.empty:
+                continue
+
+            fold_predictions, report = walk_forward_forecast(
+                series,
+                cutoff,
+                list(group["hour"]),
+                horizon,
+                city=str(city),
+                orders=DEFAULT_ORDERS,
+                seasonal_order=seasonal_order,
+            )
+
+            for hour, value in fold_predictions.items():
+                predictions[(city, hour)] = value
+
+            aic = f"{report.aic:.1f}" if report.aic is not None else "none"
+            print(
+                f"    fold {fold_number:2d} {city:<10} order {report.order} "
+                f"AIC {aic:>9}  predicted {report.predictions:3d}  "
+                f"failed {report.failures:3d}  diverged {report.diverged:3d}"
+            )
+
+            for note in report.notes[:3]:
+                print(f"      note: {note}")
+
+    return predictions
+
+
+def summarise(
+    predictions: pd.DataFrame,
+    target: str,
+    horizon: int,
+    models: tuple[str, ...],
+) -> pd.DataFrame:
+    """Score each model on the rows it actually produced a prediction for."""
+
+    rows = []
+
+    for name in models:
+        usable = predictions[[target, name]].dropna()
+
+        if usable.empty:
+            continue
+
+        rows.append(
+            {
+                "horizon": horizon,
+                "model": name,
+                "n": len(usable),
+                "mae": mean_absolute_error(usable[target], usable[name]),
+                "rmse": root_mean_squared_error(usable[target], usable[name]),
+            }
+        )
+
+    summary = pd.DataFrame(rows)
+
+    if summary.empty:
+        return summary
+
+    baseline = summary.loc[summary["model"] == "persistence"].iloc[0]
+    summary["mae_gain_vs_persistence_pct"] = (
+        (baseline["mae"] - summary["mae"]) / baseline["mae"] * 100
+    )
+    summary["rmse_gain_vs_persistence_pct"] = (
+        (baseline["rmse"] - summary["rmse"]) / baseline["rmse"] * 100
+    )
+
+    return summary
+
+
+def report(summary: pd.DataFrame, indent: str = "  ") -> None:
+    for _, row in summary.iterrows():
+        print(
+            f"{indent}{row['model']:14s} MAE {row['mae']:7.3f}  "
+            f"RMSE {row['rmse']:7.3f}  "
+            f"(MAE {row['mae_gain_vs_persistence_pct']:+6.1f}% vs persistence, "
+            f"n={int(row['n'])})"
+        )
+
+
+def evaluate_horizon(
+    data: pd.DataFrame,
+    horizon: int,
+    *,
+    sarima: bool = False,
+    seasonal: bool = False,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     target = TARGET_TEMPLATE.format(horizon=horizon)
     evaluable = data.dropna(subset=[AQI_COLUMN, target]).copy()
 
@@ -137,6 +272,15 @@ def evaluate_horizon(data: pd.DataFrame, horizon: int) -> tuple[pd.DataFrame, pd
             f"least {MINIMUM_FOLD_COVERAGE:.0%}."
         )
 
+    sarima_by_key: dict[tuple[str, pd.Timestamp], float] = {}
+
+    if sarima:
+        print("  SARIMA walk-forward (slow: one fit per candidate order, per")
+        print("  fold, per city, then a filter step for every hour):")
+        sarima_by_key = sarima_predictions(
+            data, folds, horizon, seasonal=seasonal
+        )
+
     features = model_feature_names(data)
     rows = []
 
@@ -159,41 +303,87 @@ def evaluate_horizon(data: pd.DataFrame, horizon: int) -> tuple[pd.DataFrame, pd
         fold["random_forest"] = predicted
         fold["persistence"] = test[AQI_COLUMN].to_numpy()
         fold["climatology"] = float(train[target].mean())
+
+        if sarima:
+            fold["sarima"] = [
+                sarima_by_key.get((city, hour), float("nan"))
+                for city, hour in zip(fold["city"], fold["hour"], strict=True)
+            ]
+
         rows.append(fold)
 
     if not rows:
         return pd.DataFrame(), pd.DataFrame()
 
     predictions = pd.concat(rows, ignore_index=True)
-    actual = predictions[target].to_numpy()
 
-    summary = []
-    for name in ("random_forest", "persistence", "climatology"):
-        estimate = predictions[name].to_numpy()
-        summary.append(
-            {
-                "horizon": horizon,
-                "model": name,
-                "n": len(actual),
-                "mae": mean_absolute_error(actual, estimate),
-                "rmse": root_mean_squared_error(actual, estimate),
-            }
+    models = ("random_forest", "persistence", "climatology")
+
+    if sarima:
+        models = (*models, "sarima")
+
+    summary = summarise(predictions, target, horizon, models)
+
+    if summary.empty:
+        return summary, predictions
+
+    report(summary)
+
+    # If SARIMA could not predict every row, the table above scores it on
+    # fewer observations than the others, and the comparison is not paired.
+    # Scoring every model again on exactly the rows SARIMA managed is the
+    # only like-for-like reading.
+    if sarima:
+        covered = predictions["sarima"].notna()
+        share = covered.sum() / len(predictions) if len(predictions) else 0.0
+
+        if share < MINIMUM_SARIMA_COVERAGE:
+            print(
+                f"\n  WARNING: SARIMA produced a usable forecast for only "
+                f"{share:.0%} of the test rows. A score computed on the "
+                "survivors of a model that diverged elsewhere flatters it, "
+                "because the rows it failed on are exactly the hard ones."
+            )
+
+    if sarima and "sarima" in set(summary["model"]):
+        covered = predictions["sarima"].notna()
+
+        if covered.sum() and covered.sum() < len(predictions):
+            paired = summarise(
+                predictions[covered], target, horizon, models
+            )
+            paired["subset"] = "sarima_rows"
+            print(
+                f"\n  On the {int(covered.sum())} of {len(predictions)} rows "
+                "SARIMA could predict:"
+            )
+            report(paired, indent="    ")
+            summary = pd.concat(
+                [summary.assign(subset="all_rows"), paired],
+                ignore_index=True,
+            )
+
+    print(
+        "\n  Paired against persistence on the rows both predicted. The "
+        "interval is a\n  moving-block bootstrap of the mean gain: "
+        "consecutive hours of a 24-hour\n  rolling mean share most of their "
+        "observations, so treating them as\n  independent would claim more "
+        "confidence than the data supports."
+    )
+
+    for name in models:
+        if name == "persistence" or name not in predictions.columns:
+            continue
+
+        comparison = compare_to_baseline(
+            predictions[target].to_numpy(),
+            predictions[name].to_numpy(),
+            predictions["persistence"].to_numpy(),
+            model_name=name,
         )
 
-    summary = pd.DataFrame(summary)
-    baseline = summary.loc[summary["model"] == "persistence"].iloc[0]
-    summary["mae_gain_vs_persistence_pct"] = (
-        (baseline["mae"] - summary["mae"]) / baseline["mae"] * 100
-    )
-    summary["rmse_gain_vs_persistence_pct"] = (
-        (baseline["rmse"] - summary["rmse"]) / baseline["rmse"] * 100
-    )
-
-    for _, row in summary.iterrows():
-        print(
-            f"  {row['model']:14s} MAE {row['mae']:7.3f}  RMSE {row['rmse']:7.3f}"
-            f"  (MAE {row['mae_gain_vs_persistence_pct']:+6.1f}% vs persistence)"
-        )
+        if comparison is not None:
+            print(format_comparison(comparison))
 
     return summary, predictions
 
@@ -211,6 +401,15 @@ def main() -> None:
                              "pipeline silently evaluates stale features.")
     parser.add_argument("--write-csv", type=str, default=None,
                         help="Save the features this run used to this path.")
+    parser.add_argument("--sarima", action="store_true",
+                        help="Also benchmark SARIMA on the same folds. Slow: "
+                             "it fits every candidate order per fold per city "
+                             "and then steps a Kalman filter through every "
+                             "hour. Expect tens of minutes.")
+    parser.add_argument("--seasonal", action="store_true",
+                        help="Give SARIMA a 24-hour seasonal term. The AQI is "
+                             "already a 24-hour mean, so this mostly models "
+                             "the smoothing; off by default.")
     args = parser.parse_args()
 
     features = load_features(args.csv)
@@ -243,7 +442,9 @@ def main() -> None:
 
     summaries, predictions = [], []
     for horizon in args.horizons:
-        summary, prediction = evaluate_horizon(data, horizon)
+        summary, prediction = evaluate_horizon(
+            data, horizon, sarima=args.sarima, seasonal=args.seasonal
+        )
         if not summary.empty:
             summaries.append(summary)
             predictions.append(prediction)
