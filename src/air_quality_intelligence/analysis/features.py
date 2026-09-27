@@ -13,6 +13,15 @@ from air_quality_intelligence.transform.units import (
     UnitConversionError,
     normalize_concentration,
 )
+from air_quality_intelligence.transform.validation import is_plausible
+
+# A sensor feed is only worth naming in the report once there is enough of it
+# to judge.
+MINIMUM_READINGS_TO_JUDGE_A_SENSOR = 24
+
+# Above this share of impossible readings the problem is the feed itself, not
+# an occasional bad hour, and it is named individually in the report.
+SYSTEMATIC_FAILURE_FRACTION = 0.5
 
 POLLUTANTS = [
     "pm25",
@@ -24,10 +33,21 @@ POLLUTANTS = [
 ]
 
 
-MIN_PM25_STATIONS = {
-    "Bengaluru": 5,
-    "Delhi": 31,
-}
+# Fraction of a city's usual PM2.5 station count that must be reporting
+# before the hour's city mean is treated as comparable with other hours.
+#
+# This is the project's own criterion, not a CPCB rule, and it exists for one
+# reason: the city concentration is a mean over whichever stations reported,
+# so an hour with a third of the network is a mean over a different city.
+#
+# It replaces a pair of hard-coded counts, Delhi 31 and Bengaluru 5, that were
+# taken from the maximum station count observed in a thirty-day sample. A
+# threshold set at the observed maximum fails the moment one station goes
+# offline, and it goes stale as soon as the network changes, which it did:
+# Delhi's PM2.5 coverage moved between 27 and 31 stations over the ninety-day
+# backfill. Deriving the threshold from the median count seen in the loaded
+# data keeps the gate meaningful without re-tuning it by hand.
+MIN_PM25_STATION_FRACTION = 0.75
 
 
 LAG_HOURS = [
@@ -63,8 +83,13 @@ def _normalize_measurement_units(
         co -> mg/m³
 
     Non-finite measurement values are discarded before normalization.
-    Invalid pollutant/unit combinations fail loudly rather than
-    silently entering the AQI calculation.
+    Invalid pollutant/unit combinations fail loudly rather than silently
+    entering the AQI calculation.
+
+    Physically impossible results are handled by
+    _reject_implausible_measurements, which decides between a mislabelled
+    feed and a broken instrument rather than treating every impossible
+    value the same way.
     """
     measurements = measurements.copy()
 
@@ -101,7 +126,108 @@ def _normalize_measurement_units(
     measurements["value"] = normalized_values
     measurements["unit"] = normalized_units
 
-    return measurements
+    return _reject_implausible_measurements(measurements)
+
+
+def _reject_implausible_measurements(
+    measurements: pd.DataFrame,
+    *,
+    report: bool = True,
+) -> pd.DataFrame:
+    """
+    Drop physically impossible concentrations, and fail on mislabelled feeds.
+
+    An impossible value has two very different causes and they need two
+    different responses:
+
+    Every impossible reading is dropped as missing data. CPCB's own
+    calculator already treats a non-positive reading as missing rather than
+    as a measurement of clean air, and a reading below the global
+    atmospheric background is the same kind of thing: a CO analyser sitting
+    at its zero says nothing about the other sensors at the same station,
+    and aborting the run on it stopped the whole pipeline on one station.
+
+    The other cause of an impossible value is a mislabelled unit, which is
+    systematic: every reading from that sensor is wrong by the same factor.
+    That needs a curated correction in PROVIDER_UNIT_CORRECTIONS, decided by
+    looking at the feed, not a rule inferred here. An earlier version tried
+    to tell the two apart automatically, by testing whether multiplying the
+    group's median by 1000 brought it back into range. It cannot work: the
+    plausible CO range spans four orders of magnitude, so a dead analyser
+    reading 0.03 is "rescued" to 34 mg/m3, which is inside the range and
+    absurd as ambient air. The heuristic misfired on its own test.
+
+    So the split is reporting, not control flow. Feeds that fail
+    systematically are named in the summary with their counts, loudly enough
+    that a human investigates and adds a correction if one is warranted.
+    Nothing is silently discarded.
+    """
+    if measurements.empty:
+        return measurements
+
+    work = measurements.copy()
+
+    work["_plausible"] = [
+        is_plausible(str(pollutant).strip().lower(), value)
+        for pollutant, value in zip(
+            work["pollutant"], work["value"], strict=True
+        )
+    ]
+
+    if work["_plausible"].all():
+        return work.drop(columns="_plausible")
+
+    group_columns = (
+        ["station_id", "pollutant"]
+        if "station_id" in work.columns
+        else ["pollutant"]
+    )
+
+    suspect_feeds: list[str] = []
+
+    for keys, group in work.groupby(group_columns, sort=True):
+        failures = int((~group["_plausible"]).sum())
+
+        if not failures or len(group) < MINIMUM_READINGS_TO_JUDGE_A_SENSOR:
+            continue
+
+        if failures / len(group) < SYSTEMATIC_FAILURE_FRACTION:
+            continue
+
+        if not isinstance(keys, tuple):
+            keys = (keys,)
+
+        label = ", ".join(
+            f"{column}={key}"
+            for column, key in zip(group_columns, keys, strict=True)
+        )
+
+        suspect_feeds.append(
+            f"    {label}: {failures} of {len(group)} readings impossible, "
+            f"median {float(group['value'].median()):g} "
+            f"{group['unit'].iloc[0]}"
+        )
+
+    kept = work[work["_plausible"]].drop(columns="_plausible")
+    dropped = len(work) - len(kept)
+
+    if report and dropped:
+        print(
+            f"  Dropped {dropped} impossible measurements "
+            f"({dropped / len(work):.2%} of readings), treated as missing."
+        )
+
+        if suspect_feeds:
+            print(
+                "  Sensor feeds failing systematically. If one of these is a "
+                "unit label error rather than a dead instrument, correct it "
+                "in PROVIDER_UNIT_CORRECTIONS:"
+            )
+
+            for line in suspect_feeds:
+                print(line)
+
+    return kept
 
 
 def _add_exact_lag_features(
@@ -259,6 +385,80 @@ def _add_time_based_rolling_features(
     return df
 
 
+def _pm25_station_thresholds(df: pd.DataFrame) -> pd.Series:
+    """Minimum reporting PM2.5 stations per city, derived from the data.
+
+    The threshold is MIN_PM25_STATION_FRACTION of the city's median hourly
+    PM2.5 station count, rounded up, and never below one. Using the median
+    rather than the maximum means the gate survives a single station going
+    offline, and deriving it per load means it does not need re-tuning when
+    the monitoring network changes.
+    """
+    counts = df.loc[df["pm25_station_count"].notna(), ["city", "pm25_station_count"]]
+
+    if counts.empty:
+        return pd.Series(1, index=df.index, dtype="float64")
+
+    medians = counts.groupby("city")["pm25_station_count"].median()
+
+    thresholds = (
+        (medians * MIN_PM25_STATION_FRACTION)
+        .apply(np.ceil)
+        .clip(lower=1.0)
+    )
+
+    return df["city"].map(thresholds).fillna(1.0)
+
+
+def _city_hourly_concentrations(
+    measurements: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Average a city's sensor readings for one hour and one pollutant.
+
+    The mean is taken in two stages, station first and city second, so that
+    every station contributes once. Averaging the raw rows in a single pass
+    weights each station by how often it happened to report: a station
+    sending four readings in an hour would count four times as much as one
+    sending a single hourly value, which turns a reporting-frequency
+    difference into an apparent concentration difference.
+
+    Returns one row per city, hour and pollutant, carrying the station count
+    that stands behind the value.
+    """
+    per_station = (
+        measurements
+        .groupby(
+            [
+                "city",
+                "hour",
+                "pollutant",
+                "station_id",
+            ],
+            as_index=False,
+        )
+        .agg(
+            value=("value", "mean"),
+        )
+    )
+
+    return (
+        per_station
+        .groupby(
+            [
+                "city",
+                "hour",
+                "pollutant",
+            ],
+            as_index=False,
+        )
+        .agg(
+            value=("value", "mean"),
+            station_count=("station_id", "nunique"),
+        )
+    )
+
+
 def _build_temporal_aqi_table(
     measurements: pd.DataFrame,
 ) -> pd.DataFrame:
@@ -280,20 +480,19 @@ def _build_temporal_aqi_table(
     trailing averaging window.
     """
 
-    hourly = (
-        measurements
-        .groupby(
-            [
-                "city",
-                "hour",
-                "pollutant",
-            ],
-            as_index=False,
+    # The input is already one row per city, hour and pollutant, produced by
+    # _city_hourly_concentrations. Re-aggregating here would be a no-op at
+    # best, so the frame is taken as given.
+    expected = {"city", "hour", "pollutant", "value"}
+    missing = expected.difference(measurements.columns)
+
+    if missing:
+        raise ValueError(
+            "Temporal AQI input must be aggregated to city, hour and "
+            f"pollutant; missing columns: {sorted(missing)}."
         )
-        .agg(
-            value=("value", "mean"),
-        )
-    )
+
+    hourly = measurements.copy()
 
     hourly["hour"] = pd.to_datetime(
         hourly["hour"],
@@ -348,8 +547,21 @@ def _build_temporal_aqi_table(
     concentrations.columns.name = None
 
     def calculate_row_aqi(row: pd.Series) -> float | None:
-        # AQI is produced only when all six project pollutants
-        # have valid temporal averages for this timestamp.
+        # AQI is produced only when all six project pollutants have valid
+        # temporal averages for this timestamp.
+        #
+        # This is stricter than CPCB requires. The published rule is three
+        # pollutants including PM2.5 or PM10, so relaxing this gate would
+        # recover rows. It is not relaxed, for one reason: the AQI is the
+        # maximum sub-index, so a row built from three pollutants and a row
+        # built from six are not the same quantity. The three-pollutant row
+        # cannot see a peak in the three it is missing, which makes it
+        # systematically lower, and mixing the two would put a definitional
+        # step change into the forecasting target.
+        #
+        # The cost is real and should be quoted when the row count is quoted.
+        # Changing this changes the target, so it invalidates the final
+        # holdout and every result measured against it.
         if not all(
             pollutant in row.index and pd.notna(row[pollutant])
             for pollutant in POLLUTANTS
@@ -527,21 +739,7 @@ def load_hourly_features(
     # Hourly city-level pollutant concentrations
     # ---------------------------------------------------------------
 
-    hourly_measurements = (
-        measurements
-        .groupby(
-            [
-                "city",
-                "hour",
-                "pollutant",
-            ],
-            as_index=False,
-        )
-        .agg(
-            value=("value", "mean"),
-            station_count=("station_id", "nunique"),
-        )
-    )
+    hourly_measurements = _city_hourly_concentrations(measurements)
 
     concentrations = (
         hourly_measurements
@@ -637,21 +835,12 @@ def load_hourly_features(
     # PM2.5 coverage gate
     # ---------------------------------------------------------------
 
+    df["pm25_station_threshold"] = _pm25_station_thresholds(df)
+
     df["pm25_coverage_valid"] = (
-        df.apply(
-            lambda row: (
-                pd.notna(row.get("pm25"))
-                and pd.notna(
-                    row.get("pm25_station_count")
-                )
-                and row["pm25_station_count"]
-                >= MIN_PM25_STATIONS.get(
-                    row["city"],
-                    1,
-                )
-            ),
-            axis=1,
-        )
+        df["pm25"].notna()
+        & df["pm25_station_count"].notna()
+        & (df["pm25_station_count"] >= df["pm25_station_threshold"])
     )
 
     # ---------------------------------------------------------------

@@ -3,7 +3,8 @@
 Run from the project root:
 
     python scripts/evaluate_horizon_forecast.py
-    python scripts/evaluate_horizon_forecast.py --horizons 18 24 --csv outputs/feature_table.csv
+    python scripts/evaluate_horizon_forecast.py --horizons 18 24
+    python scripts/evaluate_horizon_forecast.py --write-csv outputs/feature_table.csv
 """
 
 from __future__ import annotations
@@ -33,18 +34,53 @@ RANDOM_FOREST_PARAMS = {
 }
 
 MINIMUM_TRAINING_DAYS = 7
-TEST_OBSERVATIONS_PER_CITY = 16
 NUMBER_OF_FOLDS = 10
 
 # Folds testing less than this share of the evaluable record produce a metric
 # that describes a slice rather than the period, and the run says so loudly.
 MINIMUM_FOLD_COVERAGE = 0.40
 
+# Share of the evaluable record the folds aim to test, used to size each test
+# block from the data rather than from a constant.
+#
+# A fixed block size cannot work here. create_expanding_folds advances its
+# cutoff to the last test timestamp, so a block of 16 observations per city
+# moves the window about sixteen hours per fold: ten folds then span a week
+# whatever the record length. On thirty days that was tolerable. On ninety it
+# tested 13% of the rows, and the coverage guard fired on every run.
+#
+# Sizing the block from the row count instead keeps coverage roughly constant
+# as the dataset grows. The target is below 1.0 because the earliest rows go
+# to the first fold's training window and cannot be tested.
+TARGET_FOLD_COVERAGE = 0.60
+
+# Set from the data in main(). Kept as a module global because
+# evaluate_horizon reads it.
+TEST_OBSERVATIONS_PER_CITY = 16
+
+
+def size_test_block(evaluable_rows: int, cities: int) -> int:
+    """Test observations per city per fold, sized to hit the coverage target."""
+
+    if evaluable_rows <= 0 or cities <= 0:
+        return 1
+
+    per_city = int(
+        TARGET_FOLD_COVERAGE * evaluable_rows / cities / NUMBER_OF_FOLDS
+    )
+
+    return max(per_city, 1)
+
 OUTPUT_DIR = Path("outputs")
 
 
 def load_features(csv: str | None) -> pd.DataFrame:
     if csv:
+        print(
+            f"  Reading features from {csv}. The database is NOT being read, "
+            "so any change to the feature pipeline since this file was "
+            "written is not reflected below."
+        )
         return pd.read_csv(csv, parse_dates=["hour"])
 
     from air_quality_intelligence.analysis.features import load_hourly_features
@@ -165,18 +201,45 @@ def evaluate_horizon(data: pd.DataFrame, horizon: int) -> tuple[pd.DataFrame, pd
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--horizons", type=int, nargs="+", default=[18, 24])
-    parser.add_argument("--test-per-city", type=int, default=TEST_OBSERVATIONS_PER_CITY,
-                        help="Test observations per city per fold. Raise this on long records.")
+    parser.add_argument("--test-per-city", type=int, default=None,
+                        help="Test observations per city per fold. Sized from "
+                             "the data when omitted.")
     parser.add_argument("--csv", type=str, default=None,
-                        help="Read features from CSV instead of the database.")
+                        help="READ features from this CSV instead of rebuilding "
+                             "them from the database. Use --write-csv to save "
+                             "one. Passing this after a change to the feature "
+                             "pipeline silently evaluates stale features.")
+    parser.add_argument("--write-csv", type=str, default=None,
+                        help="Save the features this run used to this path.")
     args = parser.parse_args()
-
-    globals()["TEST_OBSERVATIONS_PER_CITY"] = args.test_per_city
 
     features = load_features(args.csv)
     print(f"Feature rows: {len(features)}  cities: {features['city'].nunique()}")
 
+    if args.write_csv:
+        Path(args.write_csv).parent.mkdir(parents=True, exist_ok=True)
+        features.to_csv(args.write_csv, index=False)
+        print(f"Wrote {args.write_csv}")
+
     data = build_horizon_dataset(features, horizons=tuple(args.horizons))
+
+    if args.test_per_city is not None:
+        globals()["TEST_OBSERVATIONS_PER_CITY"] = args.test_per_city
+    else:
+        # Size from the shortest horizon, which has the most evaluable rows,
+        # so one block size serves every horizon in the run.
+        evaluable = min(
+            len(data.dropna(subset=[AQI_COLUMN, TARGET_TEMPLATE.format(horizon=h)]))
+            for h in args.horizons
+        )
+        globals()["TEST_OBSERVATIONS_PER_CITY"] = size_test_block(
+            evaluable, data["city"].nunique()
+        )
+
+    print(
+        f"Test block: {TEST_OBSERVATIONS_PER_CITY} observations per city "
+        f"per fold, {NUMBER_OF_FOLDS} folds"
+    )
 
     summaries, predictions = [], []
     for horizon in args.horizons:

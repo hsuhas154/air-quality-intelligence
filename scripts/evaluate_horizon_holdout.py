@@ -17,7 +17,7 @@ after the holdout start are therefore dropped.
 Run from the project root:
 
     python scripts/evaluate_horizon_holdout.py
-    python scripts/evaluate_horizon_holdout.py --csv outputs/feature_table.csv
+    python scripts/evaluate_horizon_holdout.py --write-csv outputs/feature_table.csv
 """
 
 from __future__ import annotations
@@ -54,6 +54,11 @@ CHECKPOINT_DIR = Path("results/checkpoints")
 
 def load_features(csv: str | None) -> pd.DataFrame:
     if csv:
+        print(
+            f"  Reading features from {csv}. The database is NOT being read, "
+            "so any change to the feature pipeline since this file was "
+            "written is not reflected below."
+        )
         return pd.read_csv(csv, parse_dates=["hour"])
 
     from air_quality_intelligence.analysis.features import load_hourly_features
@@ -100,12 +105,22 @@ def split_with_embargo(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--csv", type=str, default=None)
+    parser.add_argument("--csv", type=str, default=None,
+                        help="READ features from this CSV instead of the "
+                             "database. Use --write-csv to save one.")
+    parser.add_argument("--write-csv", type=str, default=None,
+                        help="Save the features this run used to this path.")
     args = parser.parse_args()
 
     target = TARGET_TEMPLATE.format(horizon=HORIZON)
 
     features = load_features(args.csv)
+
+    if args.write_csv:
+        Path(args.write_csv).parent.mkdir(parents=True, exist_ok=True)
+        features.to_csv(args.write_csv, index=False)
+        print(f"Wrote {args.write_csv}")
+
     data = build_horizon_dataset(features, horizons=(HORIZON,))
     evaluable = data.dropna(subset=[AQI_COLUMN, target]).copy()
 
